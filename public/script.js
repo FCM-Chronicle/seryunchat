@@ -346,6 +346,7 @@ socket.on('updateUserCount', (data) => {
 // 서버로부터 현재 활성 사용자 목록 요청
 socket.on('connect', () => {
     socket.emit('getActiveUsers');
+    addMessage('서버에 연결되었습니다.', false, true);
 });
 
 // 현재 활성 사용자 목록 수신
@@ -481,11 +482,6 @@ document.getElementById('username-input').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') {
         document.getElementById('username-submit').click();
     }
-});
-
-// 시스템 메시지 - 연결 성공
-socket.on('connect', () => {
-    addMessage('서버에 연결되었습니다.', false, true);
 });
 
 // 시스템 메시지 - 연결 끊김
