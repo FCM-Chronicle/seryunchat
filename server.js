@@ -161,8 +161,26 @@ io.on('connection', (socket) => {
     }
   });
   
-  // 메시지 삭제 처리
-  socket.on('deleteMessage', (data) => {
+  // 이미지 수신 및 브로드캐스트
+  socket.on('sendImage', (imageData) => {
+    const user = activeUsers[socket.id];
+    
+    if (user && !user.isSuspended) {
+      // 이미지 브로드캐스트 데이터
+      const broadcastData = {
+        sender: user.username,
+        color: user.color,
+        imageData: imageData.imageData,
+        fileName: imageData.fileName,
+        timestamp: Date.now()
+      };
+      
+      console.log(`${user.username}님이 이미지를 전송했습니다: ${imageData.fileName}`);
+      
+      // 모든 클라이언트에게 이미지 브로드캐스트
+      io.emit('newImage', broadcastData);
+    }
+  });
     const user = activeUsers[socket.id];
     
     if (user && userMessages[socket.id]) {
