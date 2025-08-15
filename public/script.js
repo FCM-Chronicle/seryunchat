@@ -43,6 +43,27 @@ function formatTime(timestamp) {
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 }
 
+// 이모지만 있는지 확인하는 함수
+function isEmojiOnly(text) {
+    const emojiRegex = /^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]+$/u;
+    return emojiRegex.test(text.trim());
+}
+
+// 이모지 애니메이션 함수
+function createFlyingEmoji(emoji, startX, startY) {
+    const flyingEmoji = document.createElement('div');
+    flyingEmoji.classList.add('flying-emoji');
+    flyingEmoji.textContent = emoji;
+    flyingEmoji.style.left = startX + 'px';
+    flyingEmoji.style.top = startY + 'px';
+    
+    document.body.appendChild(flyingEmoji);
+    
+    setTimeout(() => {
+        flyingEmoji.remove();
+    }, 3000);
+}
+
 // 이미지를 Base64로 변환하는 함수
 function fileToBase64(file) {
     return new Promise((resolve, reject) => {
