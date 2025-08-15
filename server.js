@@ -57,6 +57,7 @@ if (fs.existsSync(path.join(__dirname, 'public'))) {
 
 // 활성 사용자 저장 객체
 const activeUsers = {};
+const userMessages = {}; // 사용자별 메시지 저장
 
 // Socket.IO 연결 처리
 io.on('connection', (socket) => {
@@ -101,6 +102,9 @@ io.on('connection', (socket) => {
       isAdmin: userData.isAdmin || false,
       isSuspended: false
     };
+    
+    // 사용자별 메시지 저장소 초기화
+    userMessages[socket.id] = [];
       
     // 입장 메시지 브로드캐스트
     io.emit('userJoined', {
@@ -132,7 +136,9 @@ io.on('connection', (socket) => {
         sender: user.username,
         color: user.color,
         text: messageData.text,
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        messageId: messageData.messageId,
+        isEdited: false
       };
       
       // 멘션이 포함된 경우 추가 정보 설정
@@ -140,8 +146,88 @@ io.on('connection', (socket) => {
         broadcastData.mentions = messageData.mentions;
       }
       
+      // 메시지 저장
+      if (!userMessages[socket.id]) {
+        userMessages[socket.id] = [];
+      }
+      userMessages[socket.id].push({
+        messageId: messageData.messageId,
+        text: messageData.text,
+        timestamp: Date.now()
+      });
+      
       // 모든 클라이언트에게 메시지 브로드캐스트
       io.emit('newMessage', broadcastData);
+    }
+  });
+  
+  // 메시지 삭제 처리
+  socket.on('deleteMessage', (data) => {
+    const user = activeUsers[socket.id];
+    
+    if (user && userMessages[socket.id]) {
+      // 사용자의 메시지인지 확인
+      const messageIndex = userMessages[socket.id].findIndex(msg => msg.messageId === data.messageId);
+      
+      if (messageIndex !== -1) {
+        // 메시지 삭제 표시
+        userMessages[socket.id][messageIndex].deleted = true;
+        
+        // 모든 클라이언트에게 삭제 알림
+        io.emit('messageDeleted', {
+          messageId: data.messageId,
+          deletedBy: user.username
+        });
+        
+        console.log(`${user.username}님이 메시지를 삭제했습니다: ${data.messageId}`);
+      }
+    }
+  });
+  
+  // 메시지 수정 처리
+  socket.on('editMessage', (data) => {
+    const user = activeUsers[socket.id];
+    
+    if (user && userMessages[socket.id]) {
+      // 사용자의 메시지인지 확인
+      const messageIndex = userMessages[socket.id].findIndex(msg => msg.messageId === data.messageId);
+      
+      if (messageIndex !== -1) {
+        // 메시지 수정
+        userMessages[socket.id][messageIndex].text = data.newText;
+        userMessages[socket.id][messageIndex].edited = true;
+        userMessages[socket.id][messageIndex].editedAt = Date.now();
+        
+        // 모든 클라이언트에게 수정 알림
+        io.emit('messageEdited', {
+          messageId: data.messageId,
+          newText: data.newText,
+          editedBy: user.username
+        });
+        
+        console.log(`${user.username}님이 메시지를 수정했습니다: ${data.messageId}`);
+      }
+    }
+  });
+  
+  // 이미지 수신 및 브로드캐스트
+  socket.on('sendImage', (imageData) => {
+    const user = activeUsers[socket.id];
+    
+    if (user && !user.isSuspended) {
+      // 이미지 브로드캐스트 데이터
+      const broadcastData = {
+        sender: user.username,
+        color: user.color,
+        imageData: imageData.imageData,
+        fileName: imageData.fileName,
+        timestamp: Date.now()
+      };
+      
+      console.log(`${user.username}님이 이미지를 전송했습니다: ${imageData.fileName}`);
+      
+      // 모든 클라이언트에게 이미지 브로드캐스트
+      io.emit('newImage', broadcastData);
     }
   });
   
@@ -158,8 +244,9 @@ io.on('connection', (socket) => {
         userCount: Object.keys(activeUsers).length - 1
       });
       
-      // 사용자 정보 삭제
+      // 사용자 정보 및 메시지 삭제
       delete activeUsers[socket.id];
+      delete userMessages[socket.id];
       
       // 사용자 수 업데이트
       io.emit('updateUserCount', {
