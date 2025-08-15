@@ -214,7 +214,22 @@ function cancelEdit(messageId) {
 
 // 메시지 추가 (개선)
 function addMessage(message, isUser = false, isSystem = false, isAdmin = false, isKick = false, messageId = null, isEdited = false) {
+    console.log('addMessage 호출됨:', {
+        message,
+        isUser,
+        isSystem,
+        isAdmin,
+        isKick,
+        messageId,
+        isEdited
+    });
+    
     const messagesContainer = document.getElementById('messages');
+    if (!messagesContainer) {
+        console.error('messages 컨테이너를 찾을 수 없습니다!');
+        return;
+    }
+    
     const messageElement = document.createElement('div');
     
     messageElement.classList.add('message');
@@ -224,6 +239,7 @@ function addMessage(message, isUser = false, isSystem = false, isAdmin = false, 
     
     // 이모지만 있는 메시지인지 확인
     const isEmojiOnlyMessage = !isSystem && !isAdmin && !isKick && isEmojiOnly(message);
+    console.log('이모지 전용 메시지인가?', isEmojiOnlyMessage);
     
     if (isEmojiOnlyMessage) {
         messageElement.classList.add('emoji-only-message');
@@ -290,14 +306,18 @@ function addMessage(message, isUser = false, isSystem = false, isAdmin = false, 
         messageElement.appendChild(messageContent);
     }
     
+    console.log('메시지 요소 생성 완료, DOM에 추가 중...');
     messagesContainer.appendChild(messageElement);
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    console.log('메시지 DOM에 추가 완료');
 }
 
 // 메시지 전송 (개선)
 function sendMessage() {
     const messageInput = document.getElementById('message-input');
     const message = messageInput.value.trim();
+    
+    console.log('sendMessage 호출됨, 메시지:', message);
     
     if (message) {
         // 관리자 명령어 처리
@@ -308,6 +328,7 @@ function sendMessage() {
                     const targetUsername = parts[1];
                     const duration = parseInt(parts[2]);
                     if (!isNaN(duration)) {
+                        console.log('정지 명령어 전송:', targetUsername, duration);
                         socket.emit('suspendUser', { targetUsername, duration });
                         messageInput.value = '';
                         return;
@@ -318,6 +339,7 @@ function sendMessage() {
                 const parts = message.split(' ');
                 if (parts.length >= 2) {
                     const targetUsername = parts[1];
+                    console.log('강퇴 명령어 전송:', targetUsername);
                     socket.emit('kickUser', { targetUsername });
                     messageInput.value = '';
                     return;
@@ -328,11 +350,21 @@ function sendMessage() {
         // 메시지 ID 생성
         const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
+        console.log('일반 메시지 전송 준비:', {
+            text: message,
+            messageId: messageId,
+            username: username
+        });
+        
         socket.emit('sendMessage', {
             text: message,
             messageId: messageId
         });
+        
+        console.log('socket.emit sendMessage 완료');
         messageInput.value = '';
+    } else {
+        console.log('빈 메시지라서 전송하지 않음');
     }
 }
 
@@ -636,6 +668,7 @@ document.addEventListener('keydown', (e) => {
 // 소켓 이벤트들
 // 소켓 이벤트들
 socket.on('userJoined', (data) => {
+    console.log('userJoined 이벤트 수신:', data);
     addMessage(`${data.username}님이 입장했습니다.`, false, true);
     document.getElementById('user-count').textContent = data.userCount;
     onlineUsers[data.id] = data;
@@ -643,6 +676,7 @@ socket.on('userJoined', (data) => {
 });
 
 socket.on('userLeft', (data) => {
+    console.log('userLeft 이벤트 수신:', data);
     addMessage(`${data.username}님이 퇴장했습니다.`, false, true);
     document.getElementById('user-count').textContent = data.userCount;
     for (const userId in onlineUsers) {
@@ -655,10 +689,15 @@ socket.on('userLeft', (data) => {
 });
 
 socket.on('newMessage', (data) => {
+    console.log('newMessage 이벤트 수신:', data);
     const isMyMessage = data.sender === username;
+    console.log('내 메시지인가?', isMyMessage, '발신자:', data.sender, '내 이름:', username);
+    
     if (isMyMessage) {
+        console.log('내 메시지로 표시');
         addMessage(data.text, true, false, false, false, data.messageId, data.isEdited);
     } else {
+        console.log('다른 사용자 메시지로 표시');
         const messageWithSender = `<strong style="color: ${data.color}">${data.sender}</strong>: ${data.text}`;
         addMessage(messageWithSender, false, false, false, false, data.messageId, data.isEdited);
     }
@@ -666,12 +705,14 @@ socket.on('newMessage', (data) => {
 
 // 이미지 메시지 수신
 socket.on('newImage', (data) => {
+    console.log('newImage 이벤트 수신:', data);
     const isMyMessage = data.sender === username;
     addImageMessage(data.imageData, isMyMessage, data.sender, data.color, data.timestamp);
 });
 
 // 메시지 삭제 이벤트
 socket.on('messageDeleted', (data) => {
+    console.log('messageDeleted 이벤트 수신:', data);
     const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
     if (messageElement) {
         messageElement.classList.add('deleted-message');
@@ -688,6 +729,7 @@ socket.on('messageDeleted', (data) => {
 
 // 메시지 수정 이벤트
 socket.on('messageEdited', (data) => {
+    console.log('messageEdited 이벤트 수신:', data);
     const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
     if (messageElement) {
         const content = messageElement.querySelector('.message-content');
@@ -698,11 +740,18 @@ socket.on('messageEdited', (data) => {
 });
 
 socket.on('connect', () => {
+    console.log('서버에 연결됨, 소켓 ID:', socket.id);
     addMessage('서버에 연결되었습니다.', false, true);
     socket.emit('getActiveUsers');
 });
 
+socket.on('disconnect', () => {
+    console.log('서버 연결 끊어짐');
+    addMessage('서버와의 연결이 끊어졌습니다. 재연결 중...', false, true);
+});
+
 socket.on('activeUsers', (users) => {
+    console.log('activeUsers 이벤트 수신:', users);
     for (const userId in users) {
         onlineUsers[userId] = users[userId];
     }
@@ -710,6 +759,7 @@ socket.on('activeUsers', (users) => {
 });
 
 socket.on('joinError', (data) => {
+    console.log('joinError 이벤트 수신:', data);
     alert(data.message);
     document.getElementById('username-modal').style.display = 'flex';
     document.getElementById('username-input').focus();
