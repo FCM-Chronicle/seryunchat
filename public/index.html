@@ -496,7 +496,7 @@ body {
 }
 
 .game-score {
-    font-size: 20px;
+    font-size: 18px;
     font-weight: bold;
 }
 
@@ -511,26 +511,57 @@ body {
     font-size: 16px;
 }
 
+.game-lanes {
+    position: absolute;
+    top: 60px;
+    bottom: 60px;
+    left: 20px;
+    right: 20px;
+    display: flex;
+    justify-content: space-between;
+}
+
+.game-lane {
+    width: 30%;
+    height: 100%;
+    border: 1px solid #262626;
+    border-radius: 8px;
+    position: relative;
+    background: rgba(255, 255, 255, 0.05);
+}
+
 .player {
     position: absolute;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
     width: 30px;
     height: 30px;
     background: #0095f6;
     border-radius: 50%;
-    bottom: 100px;
-    left: 50%;
-    transform: translateX(-50%);
-    transition: none;
+    border: 2px solid #ffffff;
+    transition: left 0.2s ease;
+    z-index: 5;
 }
 
-.bubble-platform {
+.obstacle {
     position: absolute;
-    background: #262626;
-    border-radius: 20px;
-    padding: 8px 16px;
-    color: white;
-    font-size: 12px;
-    border: 1px solid #363636;
+    width: 80%;
+    height: 40px;
+    background: linear-gradient(135deg, #ed4956, #c13547);
+    border-radius: 8px;
+    left: 10%;
+    border: 2px solid #ff6b6b;
+    animation: moveDown linear;
+}
+
+@keyframes moveDown {
+    from {
+        top: -50px;
+    }
+    to {
+        top: 100%;
+    }
 }
 
 .game-instructions {
@@ -541,6 +572,16 @@ body {
     text-align: center;
     color: #8e8e8e;
     font-size: 12px;
+}
+
+.lane-indicator {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #8e8e8e;
+    font-size: 12px;
+    opacity: 0.5;
 }
 
 /* 수정 모드 */
@@ -593,6 +634,65 @@ body {
     opacity: 0.5;
     font-style: italic;
     color: #8e8e8e !important;
+}
+.deleted-message {
+    opacity: 0.5;
+    font-style: italic;
+    color: #8e8e8e !important;
+}
+
+/* 이미지 메시지 스타일 */
+.image-message {
+    max-width: 300px;
+    border-radius: 12px;
+    margin: 4px 0;
+}
+
+.image-message img {
+    width: 100%;
+    height: auto;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.image-message img:hover {
+    transform: scale(1.02);
+}
+
+.image-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.9);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000;
+    cursor: pointer;
+}
+
+.image-overlay img {
+    max-width: 90%;
+    max-height: 90%;
+    border-radius: 12px;
+}
+
+.paste-indicator {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #262626;
+    color: white;
+    padding: 16px 24px;
+    border-radius: 12px;
+    z-index: 1500;
+    display: none;
+    font-size: 14px;
+    border: 1px solid #363636;
 }
    </style>
 </head>
@@ -655,12 +755,12 @@ body {
                 <div class="emoji-grid">
                     <button class="emoji-item">✨</button>
                     <button class="emoji-item">💥</button>
-                    <button class="emoji-item">🤬</button>
+                    <button class="emoji-item">💫</button>
                     <button class="emoji-item">🎉</button>
                     <button class="emoji-item">🎊</button>
-                    <button class="emoji-item">🖕</button>
+                    <button class="emoji-item">💝</button>
                     <button class="emoji-item">🌟</button>
-                    <button class="emoji-item">👎</button>
+                    <button class="emoji-item">⚡</button>
                 </div>
             </div>
         </div>
@@ -670,14 +770,35 @@ body {
     <div id="game-container" class="game-container">
         <div class="game-area" id="game-area">
             <div class="game-ui">
-                <div class="game-score">높이: <span id="game-score">0</span>m</div>
+                <div class="game-score">점수: <span id="game-score">0</span></div>
                 <button class="game-close" id="game-close">✕</button>
+            </div>
+            <div class="game-lanes">
+                <div class="game-lane" id="lane-0">
+                    <div class="lane-indicator">1</div>
+                </div>
+                <div class="game-lane" id="lane-1">
+                    <div class="lane-indicator">2</div>
+                </div>
+                <div class="game-lane" id="lane-2">
+                    <div class="lane-indicator">3</div>
+                </div>
             </div>
             <div class="player" id="player"></div>
             <div class="game-instructions">
-                스페이스바로 점프! 말풍선을 밟고 높이 올라가세요
+                ← → 방향키로 이동! 장애물을 피하세요
             </div>
         </div>
+    </div>
+    
+    <!-- 이미지 오버레이 -->
+    <div id="image-overlay" class="image-overlay">
+        <img id="overlay-image" src="" alt="확대 이미지">
+    </div>
+    
+    <!-- 붙여넣기 인디케이터 -->
+    <div id="paste-indicator" class="paste-indicator">
+        이미지를 업로드하는 중...
     </div>
     
     <div id="username-modal">
