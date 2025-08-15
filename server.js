@@ -14,12 +14,46 @@ const io = socketIo(server, {
 });
 
 // 정적 파일 제공 (public 폴더)
+app.use('/style.css', (req, res, next) => {
+  console.log('CSS file requested');
+  next();
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 루트 경로에서 index.html 제공
 app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  const indexPath = path.join(__dirname, 'public', 'index.html');
+  console.log('Looking for index.html at:', indexPath);
+  res.sendFile(indexPath, (err) => {
+    if (err) {
+      console.error('Error serving index.html:', err);
+      res.status(500).send('파일을 찾을 수 없습니다.');
+    }
+  });
 });
+
+// JavaScript 파일 직접 서빙 (백업용)
+app.get('/script.js', (req, res) => {
+  const jsPath = path.join(__dirname, 'public', 'script.js');
+  console.log('Looking for script.js at:', jsPath);
+  res.sendFile(jsPath, (err) => {
+    if (err) {
+      console.error('Error serving script.js:', err);
+      res.status(404).send('JavaScript 파일을 찾을 수 없습니다.');
+    }
+  });
+});
+
+// 디버깅을 위한 파일 시스템 확인
+const fs = require('fs');
+console.log('Current directory:', __dirname);
+console.log('Files in root:', fs.readdirSync(__dirname));
+if (fs.existsSync(path.join(__dirname, 'public'))) {
+  console.log('Files in public:', fs.readdirSync(path.join(__dirname, 'public')));
+} else {
+  console.log('Public directory does not exist!');
+}
 
 // 활성 사용자 저장 객체
 const activeUsers = {};
