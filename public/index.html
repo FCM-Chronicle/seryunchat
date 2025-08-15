@@ -3,7 +3,7 @@
 <head>
    <meta charset="UTF-8">
    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   <title>서울 채팅방</title>
+   <title>영어 학습</title>
    <!-- Socket.IO 클라이언트 라이브러리 추가 -->
    <script src="/socket.io/socket.io.js"></script>
    <style>
@@ -566,7 +566,7 @@ body {
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <h1>영어 학습</h1>
+            <h1>세륜 채팅방</h1>
         </div>
         <div class="online-users-header" id="users-toggle">
             <div class="online-count">온라인: <span id="user-count">0</span>명</div>
@@ -599,130 +599,5 @@ body {
     
     <!-- JavaScript 파일 링크 -->
     <script src="/script.js"></script>
-</body>
-</html>border-radius: 4px;
-}
-
-.mention-alert {
-    position: fixed;
-    top: 20px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #262626;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 8px;
-    z-index: 1001;
-    animation: alertSlideIn 0.3s ease-out, alertFadeOut 4s forwards;
-    font-weight: 500;
-    font-size: 13px;
-    border: 1px solid #363636;
-}
-
-.kick-alert {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: #000000;
-    border: 1px solid #262626;
-    color: white;
-    padding: 24px;
-    border-radius: 12px;
-    z-index: 1001;
-    text-align: center;
-    font-size: 16px;
-    font-weight: 600;
-    animation: alertSlideIn 0.3s ease-out;
-    max-width: 90%;
-}
-
-@keyframes alertSlideIn {
-    from {
-        opacity: 0;
-        transform: translateX(-50%) translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(-50%) translateY(0);
-    }
-}
-
-@keyframes alertFadeOut {
-    0% { opacity: 1; }
-    85% { opacity: 1; }
-    100% { opacity: 0; }
-}
-
-@media (max-width: 768px) {
-    .chat-container {
-        height: 100vh;
-        border-left: none;
-        border-right: none;
-    }
-    
-    .message {
-        max-width: 85%;
-    }
-}
-   </style>
-</head>
-<body>
-    <div class="chat-container">
-        <div class="chat-header">
-            <h1>세륜 채팅방</h1>
-        </div>
-        <!-- 나머지 HTML 내용은 동일 -->
-        <div class="online-users-header" id="users-toggle">
-            <div class="online-count">온라인: <span id="user-count">0</span>명</div>
-            <div class="online-users-toggle">
-                사용자 목록 <span class="toggle-icon">▼</span>
-            </div>
-        </div>
-        <div class="online-users-panel" id="users-panel">
-            <div class="online-users-list" id="users-list">
-                <!-- 사용자 목록이 여기에 추가됩니다 -->
-            </div>
-        </div>
-        <div class="messages" id="messages">
-            <!-- 메시지가 여기에 추가됩니다 -->
-        </div>
-        <div class="chat-input">
-            <div class="typing-indicator" id="typing-indicator" style="display: none;"></div>
-            <input type="text" id="message-input" placeholder="메시지 보내기...">
-            <button id="send-button">전송</button>
-        </div>
-    </div>
-    
-    <div id="username-modal">
-        <div class="modal-content">
-            <h2>채팅에 참여하기</h2>
-            <input type="text" id="username-input" placeholder="사용자 이름">
-            <button id="username-submit">시작하기</button>
-        </div>
-    </div>
-    
-    <!-- 기존 JavaScript 코드와 동일 -->
-    <script>
-        // 여기에 기존 JavaScript 코드를 모두 넣으세요
-        // 사용자 정보
-        let username = '';
-        let userColor = '';
-        let isAdmin = false;
-        let isSuspended = false;
-        let suspendedUntil = null;
-        let suspendTimer = null;
-        
-        // 관리자 이름 설정
-        const ADMIN_USERNAME = '앳새이하준';
-        
-        // 온라인 사용자 목록 저장
-        const onlineUsers = {};
-        
-        // Socket.IO 연결
-        const socket = io();
-        
-        // ... 나머지 JavaScript 코드는 기존과 동일
-    </script>
 </body>
 </html>
