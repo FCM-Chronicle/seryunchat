@@ -201,11 +201,19 @@ function editMessage(messageId, currentText) {
     const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
     const messageContent = messageElement.querySelector('.message-content');
     
+    if (!messageContent) {
+        console.error('메시지 내용을 찾을 수 없습니다');
+        return;
+    }
+    
+    // 원본 내용 저장
+    messageElement.dataset.originalContent = messageContent.innerHTML;
+    
     messageElement.classList.add('editing-message');
     
     const editContainer = document.createElement('div');
     editContainer.innerHTML = `
-        <input type="text" class="edit-input" value="${currentText}" id="edit-input-${messageId}">
+        <input type="text" class="edit-input" value="${currentText.replace(/"/g, '&quot;')}" id="edit-input-${messageId}">
         <div class="edit-actions">
             <button class="edit-save" onclick="saveEdit('${messageId}')">저장</button>
             <button class="edit-cancel" onclick="cancelEdit('${messageId}')">취소</button>
@@ -215,22 +223,37 @@ function editMessage(messageId, currentText) {
     messageContent.innerHTML = '';
     messageContent.appendChild(editContainer);
     
-    document.getElementById(`edit-input-${messageId}`).focus();
+    const input = document.getElementById(`edit-input-${messageId}`);
+    input.focus();
+    input.select();
 }
 
 // 수정 저장
 function saveEdit(messageId) {
-    const newText = document.getElementById(`edit-input-${messageId}`).value.trim();
+    const input = document.getElementById(`edit-input-${messageId}`);
+    const newText = input.value.trim();
+    
     if (newText) {
         socket.emit('editMessage', { messageId, newText });
     }
+    
     cancelEdit(messageId);
 }
 
 // 수정 취소
 function cancelEdit(messageId) {
     editingMessageId = null;
-    location.reload(); // 간단한 방법으로 새로고침
+    const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+    
+    if (messageElement) {
+        messageElement.classList.remove('editing-message');
+        const messageContent = messageElement.querySelector('.message-content');
+        
+        // 원본 내용 복원
+        if (messageElement.dataset.originalContent) {
+            messageContent.innerHTML = messageElement.dataset.originalContent;
+        }
+    }
 }
 
 // 메시지 추가 (개선)
