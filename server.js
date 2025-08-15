@@ -123,9 +123,14 @@ io.on('connection', (socket) => {
   
   // 메시지 수신 및 브로드캐스트
   socket.on('sendMessage', (messageData) => {
+    console.log('sendMessage 이벤트 수신:', messageData, '발신자 소켓 ID:', socket.id);
+    
     const user = activeUsers[socket.id];
+    console.log('발신자 정보:', user);
     
     if (user && !user.isSuspended) {
+      console.log('메시지 처리 중...');
+      
       // 멘션 처리
       const broadcastData = {
         sender: user.username,
@@ -139,6 +144,7 @@ io.on('connection', (socket) => {
       // 멘션이 포함된 경우 추가 정보 설정
       if (messageData.mentions && messageData.mentions.length > 0) {
         broadcastData.mentions = messageData.mentions;
+        console.log('멘션 포함:', messageData.mentions);
       }
       
       // 메시지 저장
@@ -151,8 +157,19 @@ io.on('connection', (socket) => {
         timestamp: Date.now()
       });
       
+      console.log('브로드캐스트할 데이터:', broadcastData);
+      console.log('현재 연결된 클라이언트 수:', Object.keys(activeUsers).length);
+      
       // 모든 클라이언트에게 메시지 브로드캐스트
       io.emit('newMessage', broadcastData);
+      console.log('newMessage 이벤트 브로드캐스트 완료');
+    } else {
+      if (!user) {
+        console.log('사용자 정보를 찾을 수 없음. 소켓 ID:', socket.id);
+        console.log('현재 활성 사용자들:', Object.keys(activeUsers));
+      } else if (user.isSuspended) {
+        console.log('정지된 사용자가 메시지를 보내려고 함:', user.username);
+      }
     }
   });
   
