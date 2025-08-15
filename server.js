@@ -14,11 +14,6 @@ const io = socketIo(server, {
 });
 
 // 정적 파일 제공 (public 폴더)
-app.use('/style.css', (req, res, next) => {
-  console.log('CSS file requested');
-  next();
-});
-
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 루트 경로에서 index.html 제공
@@ -33,7 +28,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// JavaScript 파일 직접 서빙 (백업용)
+// JavaScript 파일 직접 서빙
 app.get('/script.js', (req, res) => {
   const jsPath = path.join(__dirname, 'public', 'script.js');
   console.log('Looking for script.js at:', jsPath);
@@ -181,6 +176,9 @@ io.on('connection', (socket) => {
       io.emit('newImage', broadcastData);
     }
   });
+  
+  // 메시지 삭제 처리
+  socket.on('deleteMessage', (data) => {
     const user = activeUsers[socket.id];
     
     if (user && userMessages[socket.id]) {
@@ -225,27 +223,6 @@ io.on('connection', (socket) => {
         
         console.log(`${user.username}님이 메시지를 수정했습니다: ${data.messageId}`);
       }
-    }
-  });
-  
-  // 이미지 수신 및 브로드캐스트
-  socket.on('sendImage', (imageData) => {
-    const user = activeUsers[socket.id];
-    
-    if (user && !user.isSuspended) {
-      // 이미지 브로드캐스트 데이터
-      const broadcastData = {
-        sender: user.username,
-        color: user.color,
-        imageData: imageData.imageData,
-        fileName: imageData.fileName,
-        timestamp: Date.now()
-      };
-      
-      console.log(`${user.username}님이 이미지를 전송했습니다: ${imageData.fileName}`);
-      
-      // 모든 클라이언트에게 이미지 브로드캐스트
-      io.emit('newImage', broadcastData);
     }
   });
   
