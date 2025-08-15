@@ -3,44 +3,47 @@
 <head>
    <meta charset="UTF-8">
    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-   <title>ì‹¤ì‹œê°„ ì±„íŒ… ì•±</title>
-   <!-- Socket.IO í´ë¼ì´ì–¸íŠ¸ ë¼ì´ë¸ŒëŸ¬ë¦¬ ì¶”ê°€ -->
+   <title>서울 채팅방</title>
+   <!-- Socket.IO 클라이언트 라이브러리 추가 -->
    <script src="/socket.io/socket.io.js"></script>
    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <div class="chat-container">
-        <div class="chat-header">ì„¸ë¥œì¤‘ ì±„íŒ…ë°©</div>
+        <div class="chat-header">
+            <h1>서울 채팅방</h1>
+        </div>
         <div class="online-users-header" id="users-toggle">
-            <div>ì˜¨ë¼ì¸: <span id="user-count">0</span>ëª…</div>
+            <div class="online-count">온라인: <span id="user-count">0</span>명</div>
             <div class="online-users-toggle">
-                ì‚¬ìš©ìž ëª©ë¡ <span class="toggle-icon">â–¼</span>
+                사용자 목록 <span class="toggle-icon">▼</span>
             </div>
         </div>
         <div class="online-users-panel" id="users-panel">
             <div class="online-users-list" id="users-list">
-                <!-- ì‚¬ìš©ìž ëª©ë¡ì´ ì—¬ê¸°ì— ì¶”ê°€ë©ë‹ˆë‹¤ -->
+                <!-- 사용자 목록이 여기에 추가됩니다 -->
             </div>
         </div>
         <div class="messages" id="messages">
-            <!-- ë©”ì‹œì§€ê°€ ì—¬ê¸°ì— ì¶”ê°€ë©ë‹ˆë‹¤ -->
+            <!-- 메시지가 여기에 추가됩니다 -->
         </div>
         <div class="chat-input">
             <div class="typing-indicator" id="typing-indicator" style="display: none;"></div>
-            <input type="text" id="message-input" placeholder="ë©”ì‹œì§€ë¥¼ ìž…ë ¥í•˜ì„¸ìš”...">
-            <button id="send-button">â†µ</button>
+            <input type="text" id="message-input" placeholder="메시지 보내기...">
+            <button id="send-button">전송</button>
         </div>
     </div>
     
     <div id="username-modal">
         <div class="modal-content">
-            <h2>ì±„íŒ…ì— ì°¸ì—¬í•˜ê¸°</h2>
-            <input type="text" id="username-input" placeholder="ì‚¬ìš©ìž ì´ë¦„ì„ ìž…ë ¥í•˜ì„¸ìš”">
-            <button id="username-submit">ì‹œìž‘í•˜ê¸°</button>
+            <h2>채팅에 참여하기</h2>
+            <input type="text" id="username-input" placeholder="사용자 이름">
+            <button id="username-submit">시작하기</button>
         </div>
     </div>
-  <script>
-        // ì‚¬ìš©ìž ì •ë³´
+    
+    <script>
+        // 사용자 정보
         let username = '';
         let userColor = '';
         let isAdmin = false;
@@ -48,26 +51,26 @@
         let suspendedUntil = null;
         let suspendTimer = null;
         
-        // ê´€ë¦¬ìž ì´ë¦„ ì„¤ì •
-        const ADMIN_USERNAME = 'ì•³ìƒˆì´í•˜ì¤€';
+        // 관리자 이름 설정
+        const ADMIN_USERNAME = '앳새이하준';
         
-        // ì˜¨ë¼ì¸ ì‚¬ìš©ìž ëª©ë¡ ì €ìž¥
+        // 온라인 사용자 목록 저장
         const onlineUsers = {};
         
-        // Socket.IO ì—°ê²°
+        // Socket.IO 연결
         const socket = io();
         
-        // ëžœë¤ ìƒ‰ìƒ ìƒì„± í•¨ìˆ˜
+        // 랜덤 색상 생성 함수
         function getRandomColor() {
             const colors = [
-                '#FF6633', '#FFB399', '#FF33FF', '#FFFF99', '#00B3E6', 
-                '#E6B333', '#3366E6', '#999966', '#99FF99', '#B34D4D',
-                '#80B300', '#809900', '#E6B3B3', '#6680B3', '#66991A'
+                '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
+                '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9',
+                '#F8C471', '#82E0AA', '#F1948A', '#85C1E9', '#D7BDE2'
             ];
             return colors[Math.floor(Math.random() * colors.length)];
         }
         
-        // ì‹œê°„ í¬ë§· í•¨ìˆ˜
+        // 시간 포맷 함수
         function formatTime(timestamp) {
             const date = new Date(timestamp);
             const hours = date.getHours().toString().padStart(2, '0');
@@ -75,7 +78,7 @@
             return `${hours}:${minutes}`;
         }
         
-        // ë©”ì‹œì§€ ì¶”ê°€ í•¨ìˆ˜
+        // 메시지 추가 함수
         function addMessage(message, isUser = false, isSystem = false, isAdmin = false, isKick = false) {
             const messagesContainer = document.getElementById('messages');
             const messageElement = document.createElement('div');
@@ -109,23 +112,23 @@
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }
         
-        // ë©”ì‹œì§€ ì „ì†¡ í•¨ìˆ˜
+        // 메시지 전송 함수
         function sendMessage() {
             const messageInput = document.getElementById('message-input');
             const message = messageInput.value.trim();
             
             if (message) {
-                // ì •ì§€ ìƒíƒœ í™•ì¸
+                // 정지 상태 확인
                 if (isSuspended) {
                     const remainingTime = Math.ceil((suspendedUntil - Date.now()) / 1000);
-                    addMessage(`ì±„íŒ…ì´ ì¼ì‹œ ì •ì§€ë˜ì—ˆìŠµë‹ˆë‹¤. ${remainingTime}ì´ˆ í›„ì— ë‹¤ì‹œ ì‹œë„í•˜ì„¸ìš”.`, false, true);
+                    addMessage(`채팅이 일시 정지되었습니다. ${remainingTime}초 후에 다시 시도하세요.`, false, true);
                     return;
                 }
                 
-                // ê´€ë¦¬ìž ëª…ë ¹ì–´ ì²˜ë¦¬
+                // 관리자 명령어 처리
                 if (isAdmin) {
-                    // ì •ì§€ ëª…ë ¹ì–´
-                    if (message.startsWith('/ì •ì§€ ')) {
+                    // 정지 명령어
+                    if (message.startsWith('/정지 ')) {
                         const parts = message.split(' ');
                         if (parts.length >= 3) {
                             const targetUsername = parts[1];
@@ -142,8 +145,8 @@
                         }
                     }
                     
-                    // ê°•í‡´ ëª…ë ¹ì–´
-                    if (message.startsWith('/ê°•í‡´ ')) {
+                    // 강퇴 명령어
+                    if (message.startsWith('/강퇴 ')) {
                         const parts = message.split(' ');
                         if (parts.length >= 2) {
                             const targetUsername = parts[1];
@@ -157,7 +160,7 @@
                     }
                 }
                 
-                // ë©˜ì…˜ í™•ì¸ ë° ì²˜ë¦¬
+                // 멘션 확인 및 처리
                 const mentionRegex = /@(\S+)/g;
                 let processedMessage = message;
                 const mentions = [];
@@ -172,23 +175,23 @@
                     );
                 }
                 
-                // ì„œë²„ì— ë©”ì‹œì§€ ì „ì†¡
+                // 서버에 메시지 전송
                 socket.emit('sendMessage', {
                     text: processedMessage,
                     mentions: mentions,
                     isHtml: mentions.length > 0
                 });
                 
-                // ìž…ë ¥ì°½ ì´ˆê¸°í™”
+                // 입력창 초기화
                 messageInput.value = '';
             }
         }
         
-        // ë©˜ì…˜ ì•Œë¦¼ í‘œì‹œ í•¨ìˆ˜
+        // 멘션 알림 표시 함수
         function showMentionAlert(username) {
             const alertElement = document.createElement('div');
             alertElement.classList.add('mention-alert');
-            alertElement.textContent = `${username}ë‹˜ì´ ë©˜ì…˜í•˜ì…¨ìŠµë‹ˆë‹¤`;
+            alertElement.textContent = `${username}님이 멘션하셨습니다`;
             document.body.appendChild(alertElement);
             
             setTimeout(() => {
@@ -196,13 +199,13 @@
             }, 4000);
         }
         
-        // ê°•í‡´ ì•Œë¦¼ í‘œì‹œ í•¨ìˆ˜
+        // 강퇴 알림 표시 함수
         function showKickAlert(adminUsername) {
             const alertElement = document.createElement('div');
             alertElement.classList.add('kick-alert');
             alertElement.innerHTML = `
-                <div>ê´€ë¦¬ìž ${adminUsername}ë‹˜ì— ì˜í•´ ê°•í‡´ë˜ì—ˆìŠµë‹ˆë‹¤.</div>
-                <div style="margin-top: 10px; font-size: 14px;">3ì´ˆ í›„ ì—°ê²°ì´ ì¢…ë£Œë©ë‹ˆë‹¤.</div>
+                <div>관리자 ${adminUsername}님에 의해 강퇴되었습니다.</div>
+                <div style="margin-top: 10px; font-size: 14px; opacity: 0.8;">3초 후 연결이 종료됩니다.</div>
             `;
             document.body.appendChild(alertElement);
             
@@ -211,50 +214,50 @@
             }, 3000);
         }
         
-        // ì˜¨ë¼ì¸ ì‚¬ìš©ìž ëª©ë¡ ì—…ë°ì´íŠ¸ í•¨ìˆ˜
+        // 온라인 사용자 목록 업데이트 함수
         function updateOnlineUsersList() {
             const usersListElement = document.getElementById('users-list');
             usersListElement.innerHTML = '';
             
-            // ì‚¬ìš©ìž ëª©ë¡ì´ ë¹„ì–´ìžˆëŠ” ê²½ìš°
+            // 사용자 목록이 비어있는 경우
             if (Object.keys(onlineUsers).length === 0) {
-                usersListElement.innerHTML = '<div style="padding: 5px 0; color: #888;">ì‚¬ìš©ìžê°€ ì—†ìŠµë‹ˆë‹¤.</div>';
+                usersListElement.innerHTML = '<div style="padding: 8px 0; color: #8e8e8e; text-align: center;">사용자가 없습니다.</div>';
                 return;
             }
             
-            // ê° ì‚¬ìš©ìžë¥¼ ëª©ë¡ì— ì¶”ê°€
+            // 각 사용자를 목록에 추가
             for (const userId in onlineUsers) {
                 const user = onlineUsers[userId];
                 const userElement = document.createElement('div');
                 userElement.classList.add('user-item');
                 
-                // ì‚¬ìš©ìž ì •ë³´ ë¶€ë¶„
+                // 사용자 정보 부분
                 const userInfoElement = document.createElement('div');
                 userInfoElement.classList.add('user-info');
                 userInfoElement.innerHTML = `
                     <div class="user-color" style="background-color: ${user.color}"></div>
-                    <div>
-                        ${user.username}${user.id === socket.id ? ' (ë‚˜)' : ''}
-                        ${user.isAdmin ? '<span class="admin-badge">ê´€ë¦¬ìž</span>' : ''}
-                        ${user.isSuspended ? '<span class="suspended-badge">ì •ì§€ë¨</span>' : ''}
+                    <div class="user-name">
+                        ${user.username}${user.id === socket.id ? ' (나)' : ''}
+                        ${user.isAdmin ? '<span class="admin-badge">관리자</span>' : ''}
+                        ${user.isSuspended ? '<span class="suspended-badge">정지됨</span>' : ''}
                     </div>
                 `;
                 
                 userElement.appendChild(userInfoElement);
                 
-                // ê´€ë¦¬ìž ê¶Œí•œì´ ìžˆê³ , ìžê¸° ìžì‹ ì´ ì•„ë‹ˆë©´ ì œìž¬ ë²„íŠ¼ í‘œì‹œ
+                // 관리자 권한이 있고, 자기 자신이 아니면 제재 버튼 표시
                 if (isAdmin && user.id !== socket.id) {
                     const adminControlsElement = document.createElement('div');
                     adminControlsElement.classList.add('admin-controls');
                     adminControlsElement.innerHTML = `
-                        <button data-username="${user.username}" data-duration="5">5ì´ˆ</button>
-                        <button data-username="${user.username}" data-duration="10">10ì´ˆ</button>
-                        <button data-username="${user.username}" data-duration="20">20ì´ˆ</button>
-                        <button data-username="${user.username}" data-duration="60">1ë¶„</button>
-                        <button class="kick-button" data-username="${user.username}">ê°•í‡´</button>
+                        <button data-username="${user.username}" data-duration="5">5초</button>
+                        <button data-username="${user.username}" data-duration="10">10초</button>
+                        <button data-username="${user.username}" data-duration="20">20초</button>
+                        <button data-username="${user.username}" data-duration="60">1분</button>
+                        <button class="kick-button" data-username="${user.username}">강퇴</button>
                     `;
                     
-                    // ì •ì§€ ë²„íŠ¼ì— ì´ë²¤íŠ¸ ë¦¬ìŠ¤ë„ˆ ì¶”ê°€
+                    // 정지 버튼에 이벤트 리스너 추가
                     adminControlsElement.querySelectorAll('button:not(.kick-button)').forEach(button => {
                         button.addEventListener('click', function() {
                             const targetUsername = this.getAttribute('data-username');
@@ -267,11 +270,11 @@
                         });
                     });
                     
-                    // ê°•í‡´ ë²„íŠ¼ì— ì´ë²¤íŠ¸ ë¦¬ìŠ¤ë„ˆ ì¶”ê°€
+                    // 강퇴 버튼에 이벤트 리스너 추가
                     adminControlsElement.querySelector('.kick-button').addEventListener('click', function() {
                         const targetUsername = this.getAttribute('data-username');
                         
-                        if (confirm(`${targetUsername}ë‹˜ì„ ê°•í‡´í•˜ì‹œê² ìŠµë‹ˆê¹Œ?`)) {
+                        if (confirm(`${targetUsername}님을 강퇴하시겠습니까?`)) {
                             socket.emit('kickUser', {
                                 targetUsername: targetUsername
                             });
@@ -285,7 +288,7 @@
             }
         }
         
-        // ì‚¬ìš©ìž ëª©ë¡ í† ê¸€ ê¸°ëŠ¥
+        // 사용자 목록 토글 기능
         document.getElementById('users-toggle').addEventListener('click', () => {
             const usersPanel = document.getElementById('users-panel');
             const toggleIcon = document.querySelector('.toggle-icon');
@@ -294,7 +297,7 @@
             toggleIcon.classList.toggle('active');
         });
         
-        // ì‚¬ìš©ìž ì´ë¦„ ì„¤ì •
+        // 사용자 이름 설정
         document.getElementById('username-submit').addEventListener('click', () => {
             const usernameInput = document.getElementById('username-input');
             username = usernameInput.value.trim();
@@ -303,39 +306,39 @@
                 userColor = getRandomColor();
                 document.getElementById('username-modal').style.display = 'none';
                 
-                // ê´€ë¦¬ìž ì—¬ë¶€ í™•ì¸
+                // 관리자 여부 확인
                 isAdmin = (username === ADMIN_USERNAME);
                 
-                // ì„œë²„ì— ì‚¬ìš©ìž ì •ë³´ ì „ì†¡
+                // 서버에 사용자 정보 전송
                 socket.emit('join', {
                     username: username,
                     color: userColor,
                     isAdmin: isAdmin
                 });
                 
-                // ê´€ë¦¬ìž ì•ˆë‚´ ë©”ì‹œì§€
+                // 관리자 안내 메시지
                 if (isAdmin) {
-                    addMessage('ê´€ë¦¬ìžë¡œ ë¡œê·¸ì¸í–ˆìŠµë‹ˆë‹¤. /ì •ì§€ [ì‚¬ìš©ìžì´ë¦„] [ì´ˆ], /ê°•í‡´ [ì‚¬ìš©ìžì´ë¦„] ëª…ë ¹ì–´ë¥¼ ì‚¬ìš©í•  ìˆ˜ ìžˆìŠµë‹ˆë‹¤.', false, false, true);
+                    addMessage('관리자로 로그인했습니다. /정지 [사용자이름] [초], /강퇴 [사용자이름] 명령어를 사용할 수 있습니다.', false, false, true);
                 }
             }
         });
         
-        // ì—”í„°í‚¤ë¡œ ë©”ì‹œì§€ ì „ì†¡
+        // 엔터키로 메시지 전송
         document.getElementById('message-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 sendMessage();
             }
         });
         
-        // ì „ì†¡ ë²„íŠ¼ í´ë¦­
+        // 전송 버튼 클릭
         document.getElementById('send-button').addEventListener('click', sendMessage);
         
-        // ì†Œì¼“ ì´ë²¤íŠ¸ ë¦¬ìŠ¤ë„ˆ
+        // 소켓 이벤트 리스너
         socket.on('userJoined', (data) => {
-            addMessage(`${data.username}ë‹˜ì´ ì±„íŒ…ë°©ì— ìž…ìž¥í•˜ì…¨ìŠµë‹ˆë‹¤.`, false, true);
+            addMessage(`${data.username}님이 채팅방에 입장하셨습니다.`, false, true);
             document.getElementById('user-count').textContent = data.userCount;
             
-            // ìƒˆ ì‚¬ìš©ìž ì •ë³´ ì €ìž¥
+            // 새 사용자 정보 저장
             onlineUsers[data.id] = {
                 id: data.id,
                 username: data.username,
@@ -344,15 +347,15 @@
                 isSuspended: false
             };
             
-            // ì‚¬ìš©ìž ëª©ë¡ ì—…ë°ì´íŠ¸
+            // 사용자 목록 업데이트
             updateOnlineUsersList();
         });
         
         socket.on('userLeft', (data) => {
-            addMessage(`${data.username}ë‹˜ì´ ì±„íŒ…ë°©ì„ ë‚˜ê°€ì…¨ìŠµë‹ˆë‹¤.`, false, true);
+            addMessage(`${data.username}님이 채팅방을 나가셨습니다.`, false, true);
             document.getElementById('user-count').textContent = data.userCount;
             
-            // ì‚¬ìš©ìž ì œê±°
+            // 사용자 제거
             for (const userId in onlineUsers) {
                 if (onlineUsers[userId].username === data.username) {
                     delete onlineUsers[userId];
@@ -360,14 +363,14 @@
                 }
             }
             
-            // ì‚¬ìš©ìž ëª©ë¡ ì—…ë°ì´íŠ¸
+            // 사용자 목록 업데이트
             updateOnlineUsersList();
         });
         
         socket.on('newMessage', (data) => {
             const isMyMessage = data.sender === username;
             
-            // ë©˜ì…˜ í™•ì¸ ë° ì•Œë¦¼ í‘œì‹œ
+            // 멘션 확인 및 알림 표시
             if (!isMyMessage && data.mentions && data.mentions.includes(username)) {
                 showMentionAlert(data.sender);
             }
@@ -375,7 +378,7 @@
             if (isMyMessage) {
                 addMessage(data.text, true);
             } else {
-                const messageWithSender = `<strong style="color: ${data.color}">${data.sender}</strong>: ${data.text}
+                const messageWithSender = `<strong style="color: ${data.color}; font-weight: 600;">${data.sender}</strong><br>${data.text}
                 <div class="message-info">${formatTime(data.timestamp)}</div>`;
                 addMessage(messageWithSender, false);
             }
@@ -385,12 +388,12 @@
             document.getElementById('user-count').textContent = data.userCount;
         });
         
-        // ì„œë²„ë¡œë¶€í„° í˜„ìž¬ í™œì„± ì‚¬ìš©ìž ëª©ë¡ ìš”ì²­
+        // 서버로부터 현재 활성 사용자 목록 요청
         socket.on('connect', () => {
             socket.emit('getActiveUsers');
         });
         
-        // í˜„ìž¬ í™œì„± ì‚¬ìš©ìž ëª©ë¡ ìˆ˜ì‹ 
+        // 현재 활성 사용자 목록 수신
         socket.on('activeUsers', (users) => {
             for (const userId in users) {
                 onlineUsers[userId] = {
@@ -404,29 +407,29 @@
             updateOnlineUsersList();
         });
         
-        // ì‚¬ìš©ìž ì •ì§€ ì²˜ë¦¬
+        // 사용자 정지 처리
         socket.on('userSuspended', (data) => {
-            // ë‚˜ë¥¼ ì •ì§€í•œ ê²½ìš°
+            // 나를 정지한 경우
             if (data.username === username) {
                 isSuspended = true;
                 suspendedUntil = Date.now() + (data.duration * 1000);
                 
-                // ì´ì „ íƒ€ì´ë¨¸ê°€ ìžˆìœ¼ë©´ ì œê±°
+                // 이전 타이머가 있으면 제거
                 if (suspendTimer) {
                     clearTimeout(suspendTimer);
                 }
                 
-                // ì •ì§€ í•´ì œ íƒ€ì´ë¨¸ ì„¤ì •
+                // 정지 해제 타이머 설정
                 suspendTimer = setTimeout(() => {
                     isSuspended = false;
                     suspendedUntil = null;
-                    addMessage(`ì±„íŒ… ì •ì§€ê°€ í•´ì œë˜ì—ˆìŠµë‹ˆë‹¤.`, false, true);
+                    addMessage(`채팅 정지가 해제되었습니다.`, false, true);
                 }, data.duration * 1000);
                 
-                addMessage(`${data.adminUsername}ë‹˜ì´ íšŒì›ë‹˜ì„ ${data.duration}ì´ˆ ë™ì•ˆ ì±„íŒ… ì •ì§€í–ˆìŠµë‹ˆë‹¤.`, false, false, true);
+                addMessage(`${data.adminUsername}님이 회원님을 ${data.duration}초 동안 채팅 정지했습니다.`, false, false, true);
             }
             
-            // ì •ì§€ëœ ì‚¬ìš©ìž ìƒíƒœ ì—…ë°ì´íŠ¸
+            // 정지된 사용자 상태 업데이트
             for (const userId in onlineUsers) {
                 if (onlineUsers[userId].username === data.username) {
                     onlineUsers[userId].isSuspended = true;
@@ -434,13 +437,13 @@
                 }
             }
             
-            // ì •ì§€ ë©”ì‹œì§€ í‘œì‹œ
-            addMessage(`${data.adminUsername}ë‹˜ì´ ${data.username}ë‹˜ì„ ${data.duration}ì´ˆ ë™ì•ˆ ì±„íŒ… ì •ì§€í–ˆìŠµë‹ˆë‹¤.`, false, false, true);
+            // 정지 메시지 표시
+            addMessage(`${data.adminUsername}님이 ${data.username}님을 ${data.duration}초 동안 채팅 정지했습니다.`, false, false, true);
             
-            // ì‚¬ìš©ìž ëª©ë¡ ì—…ë°ì´íŠ¸
+            // 사용자 목록 업데이트
             updateOnlineUsersList();
             
-            // ì§€ì •ëœ ì‹œê°„ í›„ ì •ì§€ ìƒíƒœ í•´ì œ
+            // 지정된 시간 후 정지 상태 해제
             setTimeout(() => {
                 for (const userId in onlineUsers) {
                     if (onlineUsers[userId].username === data.username) {
@@ -449,17 +452,17 @@
                     }
                 }
                 
-                // ì‚¬ìš©ìž ëª©ë¡ ì—…ë°ì´íŠ¸
+                // 사용자 목록 업데이트
                 updateOnlineUsersList();
             }, data.duration * 1000);
         });
         
-        // ê°•í‡´ ì²˜ë¦¬
+        // 강퇴 처리
         socket.on('userKicked', (data) => {
-            // ê°•í‡´ ë©”ì‹œì§€ í‘œì‹œ
-            addMessage(`${data.adminUsername}ë‹˜ì´ ${data.username}ë‹˜ì„ ê°•í‡´í–ˆìŠµë‹ˆë‹¤.`, false, false, false, true);
+            // 강퇴 메시지 표시
+            addMessage(`${data.adminUsername}님이 ${data.username}님을 강퇴했습니다.`, false, false, false, true);
             
-            // ê°•í‡´ëœ ì‚¬ìš©ìžë¥¼ ì˜¨ë¼ì¸ ëª©ë¡ì—ì„œ ì œê±°
+            // 강퇴된 사용자를 온라인 목록에서 제거
             for (const userId in onlineUsers) {
                 if (onlineUsers[userId].username === data.username) {
                     delete onlineUsers[userId];
@@ -467,24 +470,24 @@
                 }
             }
             
-            // ì‚¬ìš©ìž ëª©ë¡ ì—…ë°ì´íŠ¸
+            // 사용자 목록 업데이트
             updateOnlineUsersList();
         });
         
-        // ê°•í‡´ë‹¹í•œ ì‚¬ìš©ìž ì²˜ë¦¬
+        // 강퇴당한 사용자 처리
         socket.on('kicked', (data) => {
             showKickAlert(data.adminUsername);
-            addMessage(`${data.adminUsername}ë‹˜ì— ì˜í•´ ê°•í‡´ë˜ì—ˆìŠµë‹ˆë‹¤. ì—°ê²°ì´ ì¢…ë£Œë©ë‹ˆë‹¤.`, false, false, false, true);
+            addMessage(`${data.adminUsername}님에 의해 강퇴되었습니다. 연결이 종료됩니다.`, false, false, false, true);
             
-            // ë©”ì‹œì§€ ìž…ë ¥ ë¹„í™œì„±í™”
+            // 메시지 입력 비활성화
             document.getElementById('message-input').disabled = true;
             document.getElementById('send-button').disabled = true;
         });
         
-        // íƒ€ì´í•‘ ê¸°ëŠ¥
+        // 타이핑 기능
         let typingTimeout;
         document.getElementById('message-input').addEventListener('input', () => {
-            // ì •ì§€ ìƒíƒœì—ì„œëŠ” íƒ€ì´í•‘ ì´ë²¤íŠ¸ ë°œìƒí•˜ì§€ ì•ŠìŒ
+            // 정지 상태에서는 타이핑 이벤트 발생하지 않음
             if (!isSuspended) {
                 socket.emit('typing');
                 
@@ -495,43 +498,47 @@
             }
         });
         
-        // ë‹¤ë¥¸ ì‚¬ìš©ìž íƒ€ì´í•‘ í‘œì‹œ
-socket.on('userTyping', (data) => {
-    const typingIndicator = document.getElementById('typing-indicator');
-    typingIndicator.innerHTML = `
-        ${data.username}ë‹˜ì´ ìž…ë ¥ ì¤‘
-        <div class="typing-dots">
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-            <div class="typing-dot"></div>
-        </div>
-    `;
-    typingIndicator.style.display = 'flex';
-});
+        // 다른 사용자 타이핑 표시
+        socket.on('userTyping', (data) => {
+            const typingIndicator = document.getElementById('typing-indicator');
+            typingIndicator.innerHTML = `
+                ${data.username}님이 입력 중
+                <div class="typing-dots">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+            typingIndicator.style.display = 'flex';
+        });
         
-        // ì‚¬ìš©ìž ì´ë¦„ ìž…ë ¥ í•„ë“œì— í¬ì»¤ìŠ¤
+        socket.on('userStoppedTyping', () => {
+            document.getElementById('typing-indicator').style.display = 'none';
+        });
+        
+        // 사용자 이름 입력 필드에 포커스
         window.onload = () => {
             document.getElementById('username-input').focus();
         };
         
-        // ì—”í„°í‚¤ë¡œ ì‚¬ìš©ìž ì´ë¦„ ì œì¶œ
+        // 엔터키로 사용자 이름 제출
         document.getElementById('username-input').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') {
                 document.getElementById('username-submit').click();
             }
         });
         
-        // ì‹œìŠ¤í…œ ë©”ì‹œì§€ - ì—°ê²° ì„±ê³µ
+        // 시스템 메시지 - 연결 성공
         socket.on('connect', () => {
-            addMessage('ì„œë²„ì— ì—°ê²°ë˜ì—ˆìŠµë‹ˆë‹¤. ì‚¬ìš©ìž ì´ë¦„ì„ ìž…ë ¥í•˜ì„¸ìš”.', false, true);
+            addMessage('서버에 연결되었습니다.', false, true);
         });
         
-        // ì‹œìŠ¤í…œ ë©”ì‹œì§€ - ì—°ê²° ëŠê¹€
+        // 시스템 메시지 - 연결 끊김
         socket.on('disconnect', () => {
-            addMessage('ì„œë²„ì™€ì˜ ì—°ê²°ì´ ëŠì–´ì¡ŒìŠµë‹ˆë‹¤. ìž¬ì—°ê²° ì¤‘...', false, true);
+            addMessage('서버와의 연결이 끊어졌습니다. 재연결 중...', false, true);
         });
         
-        // ì‚¬ìš©ìž ì´ë¦„ ì˜¤ë¥˜ ì²˜ë¦¬
+        // 사용자 이름 오류 처리
         socket.on('joinError', (data) => {
             alert(data.message);
             document.getElementById('username-modal').style.display = 'flex';
