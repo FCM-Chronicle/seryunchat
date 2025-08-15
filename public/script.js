@@ -13,12 +13,13 @@ const socket = io();
 let gameActive = false;
 let player = null;
 let gameArea = null;
-let bubbles = [];
-let playerY = 0;
-let playerVelocityY = 0;
-let playerX = 50; // 퍼센트
+let obstacles = [];
+let currentLane = 1; // 0, 1, 2 (왼쪽, 가운데, 오른쪽)
 let score = 0;
+let gameSpeed = 2000; // 장애물 생성 간격 (밀리초)
+let obstacleSpeed = 3; // 장애물 이동 속도
 let gameInterval = null;
+let obstacleInterval = null;
 
 // 랜덤 색상 생성
 function getRandomColor() {
@@ -42,10 +43,113 @@ function formatTime(timestamp) {
     return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
 }
 
-// 이모지만 있는지 확인하는 함수
-function isEmojiOnly(text) {
-    const emojiRegex = /^[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]+$/u;
-    return emojiRegex.test(text.trim());
+// 이미지를 Base64로 변환하는 함수
+function fileToBase64(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+}
+
+// 이미지 메시지 추가 함수
+function addImageMessage(imageData, isUser = false, sender = '', color = '', timestamp = null) {
+    const messagesContainer = document.getElementById('messages');
+    const messageElement = document.createElement('div');
+    
+    messageElement.classList.add('message');
+    if (isUser) {
+        messageElement.classList.add('user-message');
+        messageElement.style.alignSelf = 'flex-end';
+    } else {
+        messageElement.classList.add('other-message');
+        messageElement.style.alignSelf = 'flex-start';
+    }
+    
+    // 발신자 정보 (다른 사용자 메시지인 경우)
+    if (!isUser && sender) {
+        const senderInfo = document.createElement('div');
+        senderInfo.innerHTML = `<strong style="color: ${color}; font-weight: 600;">${sender}</strong>`;
+        messageElement.appendChild(senderInfo);
+    }
+    
+    // 이미지 컨테이너
+    const imageContainer = document.createElement('div');
+    imageContainer.classList.add('image-message');
+    
+    const img = document.createElement('img');
+    img.src = imageData;
+    img.alt = '전송된 이미지';
+    img.addEventListener('click', () => {
+        showImageOverlay(imageData);
+    });
+    
+    imageContainer.appendChild(img);
+    messageElement.appendChild(imageContainer);
+    
+    // 시간 정보
+    const timeInfo = document.createElement('div');
+    timeInfo.classList.add('message-info');
+    timeInfo.textContent = formatTime(timestamp || new Date());
+    messageElement.appendChild(timeInfo);
+    
+    messagesContainer.appendChild(messageElement);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// 이미지 오버레이 표시 함수
+function showImageOverlay(imageSrc) {
+    const overlay = document.getElementById('image-overlay');
+    const overlayImage = document.getElementById('overlay-image');
+    overlayImage.src = imageSrc;
+    overlay.style.display = 'flex';
+}
+
+// 이미지 오버레이 숨기기
+function hideImageOverlay() {
+    document.getElementById('image-overlay').style.display = 'none';
+}
+
+// 붙여넣기 인디케이터 표시/숨기기
+function showPasteIndicator() {
+    document.getElementById('paste-indicator').style.display = 'block';
+}
+
+function hidePasteIndicator() {
+    document.getElementById('paste-indicator').style.display = 'none';
+}
+
+// 이미지 전송 함수
+async function sendImage(file) {
+    if (!file.type.startsWith('image/')) {
+        alert('이미지 파일만 업로드할 수 있습니다.');
+        return;
+    }
+    
+    // 파일 크기 제한 (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+        alert('이미지 크기는 5MB 이하여야 합니다.');
+        return;
+    }
+    
+    showPasteIndicator();
+    
+    try {
+        const base64 = await fileToBase64(file);
+        
+        // 서버에 이미지 전송
+        socket.emit('sendImage', {
+            imageData: base64,
+            fileName: file.name
+        });
+        
+    } catch (error) {
+        console.error('이미지 업로드 실패:', error);
+        alert('이미지 업로드에 실패했습니다.');
+    } finally {
+        hidePasteIndicator();
+    }
 }
 
 // 이모지 애니메이션 함수
@@ -258,109 +362,139 @@ function updateOnlineUsersList() {
 function startGame() {
     gameActive = true;
     score = 0;
-    playerY = 500;
-    playerVelocityY = 0;
-    playerX = 50;
-    bubbles = [];
+    currentLane = 1;
+    obstacles = [];
+    gameSpeed = 2000;
+    obstacleSpeed = 3;
     
     document.getElementById('game-container').style.display = 'flex';
     gameArea = document.getElementById('game-area');
     player = document.getElementById('player');
     
-    // 초기 플랫폼 생성
-    createBubblePlatform(200, 450, '점프!');
-    createBubblePlatform(100, 350, 'ㅎㅇ');
-    createBubblePlatform(300, 250, '대박!');
+    // 플레이어 초기 위치 설정
+    updatePlayerPosition();
     
+    // 게임 루프 시작
     gameInterval = setInterval(updateGame, 16); // 60fps
+    
+    // 장애물 생성 시작
+    createObstacles();
+    obstacleInterval = setInterval(createObstacles, gameSpeed);
 }
 
 // 게임 종료
 function endGame() {
     gameActive = false;
     clearInterval(gameInterval);
+    clearInterval(obstacleInterval);
+    
+    // 모든 장애물 제거
+    obstacles.forEach(obstacle => obstacle.element.remove());
+    obstacles = [];
+    
     document.getElementById('game-container').style.display = 'none';
     
     // 게임 결과 채팅에 전송
     if (score > 0) {
         socket.emit('sendMessage', {
-            text: `🎮 게임 결과: ${score}m 높이까지 올라갔어요!`,
+            text: `🎮 레이싱 게임 결과: ${score}점! 장애물을 ${score}개 피했어요!`,
             messageId: `game_${Date.now()}`
         });
     }
 }
 
-// 말풍선 플랫폼 생성
-function createBubblePlatform(x, y, text) {
-    const bubble = document.createElement('div');
-    bubble.classList.add('bubble-platform');
-    bubble.style.left = x + 'px';
-    bubble.style.top = y + 'px';
-    bubble.textContent = text;
-    bubble.dataset.x = x;
-    bubble.dataset.y = y;
+// 플레이어 위치 업데이트
+function updatePlayerPosition() {
+    const lanes = document.querySelectorAll('.game-lane');
+    const lane = lanes[currentLane];
+    const laneRect = lane.getBoundingClientRect();
+    const gameRect = gameArea.getBoundingClientRect();
     
-    gameArea.appendChild(bubble);
-    bubbles.push(bubble);
+    const laneCenter = (laneRect.left - gameRect.left) + (laneRect.width / 2);
+    player.style.left = laneCenter + 'px';
+}
+
+// 장애물 생성
+function createObstacles() {
+    if (!gameActive) return;
+    
+    // 3개 레인 중 2개에 장애물 생성 (1개는 비워둠)
+    const lanes = [0, 1, 2];
+    const safeLane = Math.floor(Math.random() * 3); // 안전한 레인
+    
+    lanes.forEach(laneIndex => {
+        if (laneIndex !== safeLane) {
+            createObstacle(laneIndex);
+        }
+    });
+    
+    // 점수 증가
+    score++;
+    document.getElementById('game-score').textContent = score;
+    
+    // 게임 속도 증가 (점수가 높을수록 빨라짐)
+    if (score % 5 === 0) {
+        gameSpeed = Math.max(800, gameSpeed - 100); // 최소 0.8초까지
+        obstacleSpeed += 0.5; // 장애물 이동 속도도 증가
+        
+        clearInterval(obstacleInterval);
+        obstacleInterval = setInterval(createObstacles, gameSpeed);
+    }
+}
+
+// 개별 장애물 생성
+function createObstacle(laneIndex) {
+    const lanes = document.querySelectorAll('.game-lane');
+    const lane = lanes[laneIndex];
+    
+    const obstacle = document.createElement('div');
+    obstacle.classList.add('obstacle');
+    obstacle.style.animationDuration = `${3 / obstacleSpeed}s`; // 속도에 따른 애니메이션 조정
+    
+    lane.appendChild(obstacle);
+    
+    obstacles.push({
+        element: obstacle,
+        lane: laneIndex,
+        y: -50
+    });
+    
+    // 장애물이 화면을 벗어나면 제거
+    setTimeout(() => {
+        if (obstacle.parentNode) {
+            obstacle.remove();
+            obstacles = obstacles.filter(obs => obs.element !== obstacle);
+        }
+    }, (3 / obstacleSpeed) * 1000 + 100);
 }
 
 // 게임 업데이트
 function updateGame() {
     if (!gameActive) return;
     
-    // 플레이어 물리
-    playerVelocityY += 0.8; // 중력
-    playerY += playerVelocityY;
-    
-    // 플랫폼 충돌 검사
-    bubbles.forEach(bubble => {
-        const bubbleX = parseInt(bubble.dataset.x);
-        const bubbleY = parseInt(bubble.dataset.y);
-        const playerScreenX = (playerX / 100) * 400;
+    // 충돌 검사
+    obstacles.forEach(obstacle => {
+        const obstacleRect = obstacle.element.getBoundingClientRect();
+        const playerRect = player.getBoundingClientRect();
         
-        // 충돌 검사
-        if (playerY >= bubbleY - 30 && playerY <= bubbleY + 10 &&
-            playerScreenX >= bubbleX - 20 && playerScreenX <= bubbleX + 80 &&
-            playerVelocityY > 0) {
-            playerVelocityY = -15; // 점프
-            
-            // 점수 업데이트
-            const height = Math.max(0, Math.floor((600 - playerY) / 10));
-            if (height > score) {
-                score = height;
-                document.getElementById('game-score').textContent = score;
+        // 충돌 검사 (같은 레인에 있고 Y 위치가 겹치는 경우)
+        if (obstacle.lane === currentLane) {
+            if (obstacleRect.bottom > playerRect.top && 
+                obstacleRect.top < playerRect.bottom) {
+                // 충돌 발생!
+                endGame();
+                return;
             }
         }
     });
-    
-    // 새로운 플랫폼 생성
-    if (Math.random() < 0.02 && bubbles.length < 10) {
-        const messages = ['ㅋㅋㅋ', '와!', '대박', '굿', '화이팅', '점프!', '높이!', '오케이'];
-        const randomX = Math.random() * 300;
-        const randomY = Math.random() * 100 + 150;
-        createBubblePlatform(randomX, randomY, messages[Math.floor(Math.random() * messages.length)]);
-    }
-    
-    // 화면 아래로 떨어지면 게임 오버
-    if (playerY > 650) {
-        endGame();
-        return;
-    }
-    
-    // 플레이어 위치 업데이트
-    player.style.left = playerX + '%';
-    player.style.bottom = (600 - playerY) + 'px';
-    
-    // 오래된 플랫폼 제거
-    bubbles = bubbles.filter(bubble => {
-        const bubbleY = parseInt(bubble.dataset.y);
-        if (bubbleY > playerY + 200) {
-            bubble.remove();
-            return false;
-        }
-        return true;
-    });
 }
+
+// 말풍선 플랫폼 생성 (제거)
+function createBubblePlatform(x, y, text) {
+    // 더 이상 사용하지 않음
+}
+
+// 게임 업데이트 (기존 함수 제거, 위의 새로운 updateGame으로 교체됨)
 
 // 이벤트 리스너들
 document.addEventListener('DOMContentLoaded', () => {
@@ -427,6 +561,40 @@ document.addEventListener('DOMContentLoaded', () => {
             picker.classList.remove('active');
         }
     });
+    
+    // 이미지 오버레이 클릭 시 닫기
+    document.getElementById('image-overlay').addEventListener('click', hideImageOverlay);
+    
+    // 클립보드에서 이미지 붙여넣기 감지
+    document.addEventListener('paste', async (e) => {
+        const items = e.clipboardData.items;
+        
+        for (let item of items) {
+            if (item.type.startsWith('image/')) {
+                e.preventDefault();
+                const file = item.getAsFile();
+                await sendImage(file);
+                break;
+            }
+        }
+    });
+    
+    // 드래그 앤 드롭 이미지 업로드
+    document.addEventListener('dragover', (e) => {
+        e.preventDefault();
+    });
+    
+    document.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                await sendImage(file);
+            }
+        }
+    });
 });
 
 // 키보드 이벤트 (게임용)
@@ -434,19 +602,33 @@ document.addEventListener('keydown', (e) => {
     if (!gameActive) return;
     
     switch(e.code) {
-        case 'Space':
-            e.preventDefault();
-            if (playerVelocityY >= 0) {
-                playerVelocityY = -15;
-            }
-            break;
         case 'ArrowLeft':
             e.preventDefault();
-            playerX = Math.max(5, playerX - 5);
+            if (currentLane > 0) {
+                currentLane--;
+                updatePlayerPosition();
+            }
             break;
         case 'ArrowRight':
             e.preventDefault();
-            playerX = Math.min(95, playerX + 5);
+            if (currentLane < 2) {
+                currentLane++;
+                updatePlayerPosition();
+            }
+            break;
+        case 'KeyA':
+            e.preventDefault();
+            if (currentLane > 0) {
+                currentLane--;
+                updatePlayerPosition();
+            }
+            break;
+        case 'KeyD':
+            e.preventDefault();
+            if (currentLane < 2) {
+                currentLane++;
+                updatePlayerPosition();
+            }
             break;
     }
 });
@@ -480,6 +662,12 @@ socket.on('newMessage', (data) => {
         const messageWithSender = `<strong style="color: ${data.color}">${data.sender}</strong>: ${data.text}`;
         addMessage(messageWithSender, false, false, false, false, data.messageId, data.isEdited);
     }
+});
+
+// 이미지 메시지 수신
+socket.on('newImage', (data) => {
+    const isMyMessage = data.sender === username;
+    addImageMessage(data.imageData, isMyMessage, data.sender, data.color, data.timestamp);
 });
 
 // 메시지 삭제 이벤트
