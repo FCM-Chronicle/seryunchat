@@ -534,26 +534,14 @@ function requestPvPGame() {
     }
 }
 
-// PvP 게임 초기화
+// PvP 게임 초기화 (간단하게)
 function initPvPGame(gameData) {
-    console.log('PvP 게임 초기화 시작:', gameData);
-    
-    // 피격 이벤트 추적 초기화
-    lastHitBulletId = null;
-    lastHitTime = 0;
+    console.log('🎮 PvP 게임 시작:', gameData);
     
     pvpGameActive = true;
     pvpGameId = gameData.gameId;
     isPlayer1 = gameData.isPlayer1;
     gameStarted = false;
-    
-    console.log('게임 설정:', {
-        pvpGameActive,
-        pvpGameId,
-        isPlayer1,
-        player1: gameData.player1.username,
-        player2: gameData.player2.username
-    });
     
     // UI 업데이트
     document.getElementById('player1-name').textContent = gameData.player1.username;
@@ -569,12 +557,6 @@ function initPvPGame(gameData) {
     pvpPlayer1 = document.getElementById('pvp-player1');
     pvpPlayer2 = document.getElementById('pvp-player2');
     
-    console.log('DOM 요소들:', {
-        pvpBattlefield: !!pvpBattlefield,
-        pvpPlayer1: !!pvpPlayer1,
-        pvpPlayer2: !!pvpPlayer2
-    });
-    
     // 대기 메시지 숨기기
     document.getElementById('waiting-message').style.display = 'none';
     
@@ -586,28 +568,18 @@ function initPvPGame(gameData) {
     if (isPlayer1) {
         myPosition = { x: 100, y: 100 };
         opponentPosition = { x: 600, y: 400 };
-        myDirection = 'up';
-        opponentDirection = 'up';
     } else {
         myPosition = { x: 600, y: 400 };
         opponentPosition = { x: 100, y: 100 };
-        myDirection = 'up';
-        opponentDirection = 'up';
     }
     
-    console.log('초기 위치 설정:', {
-        myPosition,
-        opponentPosition,
-        myDirection,
-        opponentDirection
-    });
+    myDirection = 'up';
+    opponentDirection = 'up';
     
     updatePvPPlayerPositions();
-    
-    // 카운트다운 시작
     startCountdown();
     
-    console.log('PvP 게임 초기화 완료');
+    console.log('✅ 게임 준비 완료');
 }
 
 // 카운트다운 시작
@@ -689,9 +661,23 @@ function updateHealthBars() {
     }
 }
 
+// 총알 발사 제한 시스템
+let lastShotTime = 0;
+const SHOT_COOLDOWN = 300; // 300ms 쿨다운
+
 // 총알 발사
 function shootBullet() {
     if (!gameStarted || !pvpGameActive) return;
+    
+    const currentTime = Date.now();
+    if (currentTime - lastShotTime < SHOT_COOLDOWN) {
+        console.log(`🚫 총알 발사 쿨다운: ${SHOT_COOLDOWN - (currentTime - lastShotTime)}ms 남음`);
+        return;
+    }
+    
+    lastShotTime = currentTime;
+    
+    console.log(`🔫 총알 발사: ${myDirection} 방향`);
     
     socket.emit('pvpShoot', {
         gameId: pvpGameId,
@@ -1211,56 +1197,37 @@ socket.on('pvpPlayerShoot', (data) => {
     createBullet(data.position, data.direction, data.playerId === socket.id);
 });
 
-// 처리된 피격 이벤트 추적 (더 강력한 방식)
-let lastHitBulletId = null;
-let lastHitTime = 0;
-
+// 간단한 피격 처리
 socket.on('pvpPlayerHit', (data) => {
-    const currentTime = Date.now();
-    
-    // 같은 총알에 대한 중복 이벤트 차단 (시간 기반)
-    if (data.bulletId === lastHitBulletId && (currentTime - lastHitTime) < 1000) {
-        console.log(`중복 피격 이벤트 차단: ${data.bulletId} (${currentTime - lastHitTime}ms 간격)`);
-        return;
-    }
-    
-    lastHitBulletId = data.bulletId;
-    lastHitTime = currentTime;
-    
-    console.log('=== 피격 이벤트 수신 (유효) ===', {
+    console.log('🎯 피격!', {
         bulletId: data.bulletId,
         health: data.health,
-        winner: data.winner,
-        isPlayer1: data.isPlayer1,
-        timestamp: currentTime
+        winner: data.winner
     });
     
     // 체력 업데이트
     if (data.isPlayer1) {
-        console.log(`Player1 체력 업데이트: ${player1Health} → ${data.health}/3`);
         player1Health = data.health;
+        console.log(`💔 Player1 체력: ${player1Health}`);
     } else {
-        console.log(`Player2 체력 업데이트: ${player2Health} → ${data.health}/3`);
         player2Health = data.health;
+        console.log(`💔 Player2 체력: ${player2Health}`);
     }
     
     updateHealthBars();
     
-    // 피격 효과 (내가 맞았을 때)
+    // 피격 효과
     if ((data.isPlayer1 && isPlayer1) || (!data.isPlayer1 && !isPlayer1)) {
-        console.log('내가 피격당함!');
         const gameArea = document.getElementById('pvp-game-area');
         gameArea.style.border = '5px solid #ff4444';
-        gameArea.style.boxShadow = '0 0 20px #ff4444';
         setTimeout(() => {
             gameArea.style.border = '3px solid #262626';
-            gameArea.style.boxShadow = 'none';
         }, 300);
     }
     
-    // 게임 종료 처리
+    // 게임 종료
     if (data.winner) {
-        console.log('=== 게임 종료 ===', data.winner);
+        console.log('🏆 게임 종료:', data.winner);
         endPvPGame(data.winner);
     }
 });
