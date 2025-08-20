@@ -538,8 +538,9 @@ function requestPvPGame() {
 function initPvPGame(gameData) {
     console.log('PvP 게임 초기화 시작:', gameData);
     
-    // 처리된 이벤트 추적 초기화
-    processedHitEvents.clear();
+    // 피격 이벤트 추적 초기화
+    lastHitBulletId = null;
+    lastHitTime = 0;
     
     pvpGameActive = true;
     pvpGameId = gameData.gameId;
@@ -1210,25 +1211,28 @@ socket.on('pvpPlayerShoot', (data) => {
     createBullet(data.position, data.direction, data.playerId === socket.id);
 });
 
-// 처리된 피격 이벤트 추적
-let processedHitEvents = new Set();
+// 처리된 피격 이벤트 추적 (더 강력한 방식)
+let lastHitBulletId = null;
+let lastHitTime = 0;
 
 socket.on('pvpPlayerHit', (data) => {
-    // 중복 이벤트 방지
-    const eventKey = `${data.bulletId}-${data.health}-${data.isPlayer1}`;
-    if (processedHitEvents.has(eventKey)) {
-        console.log(`중복 피격 이벤트 무시: ${eventKey}`);
+    const currentTime = Date.now();
+    
+    // 같은 총알에 대한 중복 이벤트 차단 (시간 기반)
+    if (data.bulletId === lastHitBulletId && (currentTime - lastHitTime) < 1000) {
+        console.log(`중복 피격 이벤트 차단: ${data.bulletId} (${currentTime - lastHitTime}ms 간격)`);
         return;
     }
-    processedHitEvents.add(eventKey);
     
-    console.log('=== 피격 이벤트 수신 (최초) ===', {
+    lastHitBulletId = data.bulletId;
+    lastHitTime = currentTime;
+    
+    console.log('=== 피격 이벤트 수신 (유효) ===', {
         bulletId: data.bulletId,
-        hitKey: data.hitKey,
         health: data.health,
         winner: data.winner,
         isPlayer1: data.isPlayer1,
-        eventKey: eventKey
+        timestamp: currentTime
     });
     
     // 체력 업데이트
