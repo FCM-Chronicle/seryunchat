@@ -538,6 +538,9 @@ function requestPvPGame() {
 function initPvPGame(gameData) {
     console.log('PvP 게임 초기화 시작:', gameData);
     
+    // 처리된 이벤트 추적 초기화
+    processedHitEvents.clear();
+    
     pvpGameActive = true;
     pvpGameId = gameData.gameId;
     isPlayer1 = gameData.isPlayer1;
@@ -1207,22 +1210,32 @@ socket.on('pvpPlayerShoot', (data) => {
     createBullet(data.position, data.direction, data.playerId === socket.id);
 });
 
+// 처리된 피격 이벤트 추적
+let processedHitEvents = new Set();
+
 socket.on('pvpPlayerHit', (data) => {
-    console.log('=== 피격 이벤트 수신 ===', data);
+    // 중복 이벤트 방지
+    const eventKey = `${data.bulletId}-${data.health}-${data.isPlayer1}`;
+    if (processedHitEvents.has(eventKey)) {
+        console.log(`중복 피격 이벤트 무시: ${eventKey}`);
+        return;
+    }
+    processedHitEvents.add(eventKey);
     
-    // 중복 처리 방지
+    console.log('=== 피격 이벤트 수신 (최초) ===', {
+        bulletId: data.bulletId,
+        hitKey: data.hitKey,
+        health: data.health,
+        winner: data.winner,
+        isPlayer1: data.isPlayer1,
+        eventKey: eventKey
+    });
+    
+    // 체력 업데이트
     if (data.isPlayer1) {
-        if (player1Health === data.health) {
-            console.log('Player1 체력 중복 업데이트 무시');
-            return;
-        }
         console.log(`Player1 체력 업데이트: ${player1Health} → ${data.health}/3`);
         player1Health = data.health;
     } else {
-        if (player2Health === data.health) {
-            console.log('Player2 체력 중복 업데이트 무시');
-            return;
-        }
         console.log(`Player2 체력 업데이트: ${player2Health} → ${data.health}/3`);
         player2Health = data.health;
     }
@@ -1244,7 +1257,6 @@ socket.on('pvpPlayerHit', (data) => {
     // 게임 종료 처리
     if (data.winner) {
         console.log('=== 게임 종료 ===', data.winner);
-        // 즉시 게임 종료 (지연 없음)
         endPvPGame(data.winner);
     }
 });
