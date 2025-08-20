@@ -9,7 +9,7 @@ const ADMIN_USERNAME = '앳새이하준';
 const onlineUsers = {};
 const socket = io();
 
-// 게임 관련 변수
+// 레이싱 게임 관련 변수
 let gameActive = false;
 let player = null;
 let gameArea = null;
@@ -20,6 +20,26 @@ let gameSpeed = 2000; // 장애물 생성 간격 (밀리초)
 let obstacleSpeed = 3; // 장애물 이동 속도
 let gameInterval = null;
 let obstacleInterval = null;
+
+// PvP 게임 관련 변수
+let pvpGameActive = false;
+let pvpGameId = null;
+let isPlayer1 = false;
+let pvpPlayer1 = null;
+let pvpPlayer2 = null;
+let pvpBattlefield = null;
+let player1Health = 3;
+let player2Health = 3;
+let bullets = [];
+let myPosition = { x: 100, y: 100 };
+let opponentPosition = { x: 200, y: 200 };
+let myDirection = 'up'; // up, down, left, right, up-left, up-right, down-left, down-right
+let opponentDirection = 'up';
+let pvpKeys = {};
+let gameStarted = false;
+let countdownActive = false;
+let lastMoveTime = 0;
+let moveInterval = null; // 연속 이동을 위한 인터벌
 
 // 랜덤 색상 생성
 function getRandomColor() {
@@ -171,21 +191,6 @@ async function sendImage(file) {
     } finally {
         hidePasteIndicator();
     }
-}
-
-// 이모지 애니메이션 함수
-function createFlyingEmoji(emoji, startX, startY) {
-    const flyingEmoji = document.createElement('div');
-    flyingEmoji.classList.add('flying-emoji');
-    flyingEmoji.textContent = emoji;
-    flyingEmoji.style.left = startX + 'px';
-    flyingEmoji.style.top = startY + 'px';
-    
-    document.body.appendChild(flyingEmoji);
-    
-    setTimeout(() => {
-        flyingEmoji.remove();
-    }, 3000);
 }
 
 // 메시지 삭제 함수
@@ -434,8 +439,19 @@ function updateOnlineUsersList() {
     }
 }
 
-// 게임 시작
-function startGame() {
+// 게임 선택 모달 표시
+function showGameSelection() {
+    document.getElementById('game-selection-modal').style.display = 'flex';
+}
+
+// 게임 선택 모달 숨기기
+function hideGameSelection() {
+    document.getElementById('game-selection-modal').style.display = 'none';
+}
+
+// 레이싱 게임 시작
+function startRacingGame() {
+    hideGameSelection();
     gameActive = true;
     score = 0;
     currentLane = 1;
@@ -458,8 +474,8 @@ function startGame() {
     obstacleInterval = setInterval(createObstacles, gameSpeed);
 }
 
-// 게임 종료
-function endGame() {
+// 레이싱 게임 종료
+function endRacingGame() {
     gameActive = false;
     clearInterval(gameInterval);
     clearInterval(obstacleInterval);
@@ -479,7 +495,310 @@ function endGame() {
     }
 }
 
-// 플레이어 위치 업데이트
+// PvP 게임 요청 (사용자 선택 방식)
+function requestPvPGame() {
+    console.log('PvP 게임 요청 시작');
+    hideGameSelection();
+    
+    // 온라인 사용자 목록 표시 (자신 제외)
+    const availableUsers = [];
+    for (const userId in onlineUsers) {
+        if (userId !== socket.id && onlineUsers[userId].username !== username) {
+            availableUsers.push(onlineUsers[userId]);
+        }
+    }
+    
+    console.log('사용 가능한 사용자들:', availableUsers);
+    
+    if (availableUsers.length === 0) {
+        alert('대전할 수 있는 다른 사용자가 없습니다.');
+        return;
+    }
+    
+    // 사용자 선택 다이얼로그
+    let userList = '대전할 상대를 선택하세요:\n\n';
+    availableUsers.forEach((user, index) => {
+        userList += `${index + 1}. ${user.username}\n`;
+    });
+    
+    const choice = prompt(userList + '\n번호를 입력하세요:');
+    const choiceNum = parseInt(choice);
+    
+    if (choiceNum && choiceNum >= 1 && choiceNum <= availableUsers.length) {
+        const targetUser = availableUsers[choiceNum - 1];
+        console.log('대전 신청 보내는 중:', targetUser.username);
+        socket.emit('sendPvPRequest', { targetUsername: targetUser.username });
+        alert(`${targetUser.username}님에게 대전 신청을 보냈습니다. 응답을 기다려주세요.`);
+    } else {
+        console.log('잘못된 선택:', choice);
+    }
+}
+
+// PvP 게임 초기화
+function initPvPGame(gameData) {
+    console.log('PvP 게임 초기화 시작:', gameData);
+    
+    pvpGameActive = true;
+    pvpGameId = gameData.gameId;
+    isPlayer1 = gameData.isPlayer1;
+    gameStarted = false;
+    
+    console.log('게임 설정:', {
+        pvpGameActive,
+        pvpGameId,
+        isPlayer1,
+        player1: gameData.player1.username,
+        player2: gameData.player2.username
+    });
+    
+    // UI 업데이트
+    document.getElementById('player1-name').textContent = gameData.player1.username;
+    document.getElementById('player2-name').textContent = gameData.player2.username;
+    
+    // 체력 초기화
+    player1Health = 3;
+    player2Health = 3;
+    updateHealthBars();
+    
+    // 플레이어 위치 초기화
+    pvpBattlefield = document.getElementById('pvp-battlefield');
+    pvpPlayer1 = document.getElementById('pvp-player1');
+    pvpPlayer2 = document.getElementById('pvp-player2');
+    
+    console.log('DOM 요소들:', {
+        pvpBattlefield: !!pvpBattlefield,
+        pvpPlayer1: !!pvpPlayer1,
+        pvpPlayer2: !!pvpPlayer2
+    });
+    
+    // 대기 메시지 숨기기
+    document.getElementById('waiting-message').style.display = 'none';
+    
+    // 플레이어 표시
+    pvpPlayer1.style.display = 'block';
+    pvpPlayer2.style.display = 'block';
+    
+    // 초기 위치 설정
+    if (isPlayer1) {
+        myPosition = { x: 100, y: 100 };
+        opponentPosition = { x: 600, y: 400 };
+        myDirection = 'up';
+        opponentDirection = 'up';
+    } else {
+        myPosition = { x: 600, y: 400 };
+        opponentPosition = { x: 100, y: 100 };
+        myDirection = 'up';
+        opponentDirection = 'up';
+    }
+    
+    console.log('초기 위치 설정:', {
+        myPosition,
+        opponentPosition,
+        myDirection,
+        opponentDirection
+    });
+    
+    updatePvPPlayerPositions();
+    
+    // 카운트다운 시작
+    startCountdown();
+    
+    console.log('PvP 게임 초기화 완료');
+}
+
+// 카운트다운 시작
+function startCountdown() {
+    countdownActive = true;
+    let count = 3;
+    
+    const waitingDiv = document.getElementById('waiting-message');
+    waitingDiv.style.display = 'block';
+    
+    const countdownInterval = setInterval(() => {
+        if (count > 0) {
+            waitingDiv.innerHTML = `<div class="countdown">${count}</div><div>게임 시작까지...</div>`;
+            count--;
+        } else {
+            waitingDiv.innerHTML = '<div class="countdown">START!</div>';
+            setTimeout(() => {
+                waitingDiv.style.display = 'none';
+                gameStarted = true;
+                countdownActive = false;
+            }, 1000);
+            clearInterval(countdownInterval);
+        }
+    }, 1000);
+}
+
+// PvP 플레이어 위치 업데이트
+function updatePvPPlayerPositions() {
+    if (!pvpPlayer1 || !pvpPlayer2) return;
+    
+    // 내 플레이어 위치 업데이트
+    if (isPlayer1) {
+        pvpPlayer1.style.left = myPosition.x + 'px';
+        pvpPlayer1.style.top = myPosition.y + 'px';
+        pvpPlayer1.className = `pvp-player player1 facing-${myDirection}`;
+        
+        pvpPlayer2.style.left = opponentPosition.x + 'px';
+        pvpPlayer2.style.top = opponentPosition.y + 'px';
+        pvpPlayer2.className = `pvp-player player2 facing-${opponentDirection}`;
+    } else {
+        pvpPlayer2.style.left = myPosition.x + 'px';
+        pvpPlayer2.style.top = myPosition.y + 'px';
+        pvpPlayer2.className = `pvp-player player2 facing-${myDirection}`;
+        
+        pvpPlayer1.style.left = opponentPosition.x + 'px';
+        pvpPlayer1.style.top = opponentPosition.y + 'px';
+        pvpPlayer1.className = `pvp-player player1 facing-${opponentDirection}`;
+    }
+}
+
+// 체력바 업데이트
+function updateHealthBars() {
+    const player1HealthBar = document.getElementById('player1-health');
+    const player2HealthBar = document.getElementById('player2-health');
+    
+    const player1Percentage = Math.max(0, (player1Health / 3 * 100));
+    const player2Percentage = Math.max(0, (player2Health / 3 * 100));
+    
+    console.log(`체력바 업데이트: Player1=${player1Percentage}%, Player2=${player2Percentage}%`);
+    
+    player1HealthBar.style.width = player1Percentage + '%';
+    player2HealthBar.style.width = player2Percentage + '%';
+    
+    // 체력에 따른 색상 변경
+    if (player1Health <= 1) {
+        player1HealthBar.style.background = '#ff4444';
+    } else if (player1Health <= 2) {
+        player1HealthBar.style.background = '#ffaa44';
+    } else {
+        player1HealthBar.style.background = '#44ff44';
+    }
+    
+    if (player2Health <= 1) {
+        player2HealthBar.style.background = '#ff4444';
+    } else if (player2Health <= 2) {
+        player2HealthBar.style.background = '#ffaa44';
+    } else {
+        player2HealthBar.style.background = '#44ff44';
+    }
+}
+
+// 총알 발사
+function shootBullet() {
+    if (!gameStarted || !pvpGameActive) return;
+    
+    socket.emit('pvpShoot', {
+        gameId: pvpGameId,
+        position: myPosition,
+        direction: myDirection
+    });
+}
+
+// 총알 생성
+function createBullet(position, direction, isMyBullet = false) {
+    const bullet = document.createElement('div');
+    bullet.classList.add('bullet');
+    bullet.style.left = position.x + 15 + 'px'; // 플레이어 중앙에서 시작
+    bullet.style.top = position.y + 15 + 'px';
+    
+    if (isMyBullet) {
+        bullet.style.background = '#00ff00'; // 내 총알은 초록색
+    }
+    
+    pvpBattlefield.appendChild(bullet);
+    
+    // 총알 이동
+    const speed = 5;
+    let dx = 0, dy = 0;
+    
+    switch (direction) {
+        case 'up': dy = -speed; break;
+        case 'down': dy = speed; break;
+        case 'left': dx = -speed; break;
+        case 'right': dx = speed; break;
+    }
+    
+    const moveBullet = () => {
+        const currentX = parseInt(bullet.style.left);
+        const currentY = parseInt(bullet.style.top);
+        
+        bullet.style.left = (currentX + dx) + 'px';
+        bullet.style.top = (currentY + dy) + 'px';
+        
+        // 경계 체크
+        if (currentX < 0 || currentX > 760 || currentY < 0 || currentY > 520) {
+            bullet.remove();
+            return;
+        }
+        
+        requestAnimationFrame(moveBullet);
+    };
+    
+    moveBullet();
+    
+    // 5초 후 자동 제거
+    setTimeout(() => {
+        if (bullet.parentNode) {
+            bullet.remove();
+        }
+    }, 5000);
+}
+
+// PvP 게임 종료
+function endPvPGame(winner = null) {
+    pvpGameActive = false;
+    gameStarted = false;
+    countdownActive = false;
+    
+    // 연속 이동 중지
+    stopContinuousMovement();
+    
+    // 키 상태 초기화
+    pvpKeys = {};
+    
+    // 모든 총알 제거
+    const bullets = document.querySelectorAll('.bullet');
+    bullets.forEach(bullet => bullet.remove());
+    
+    if (winner) {
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const gameOverText = document.getElementById('game-over-text');
+        
+        if (winner === username) {
+            gameOverText.textContent = '승리!';
+            gameOverText.className = 'game-over-text game-over-winner';
+        } else {
+            gameOverText.textContent = '패배!';
+            gameOverText.className = 'game-over-text game-over-loser';
+        }
+        
+        gameOverScreen.style.display = 'flex';
+        
+        // 3초 후 게임 종료
+        setTimeout(() => {
+            document.getElementById('pvp-game-container').style.display = 'none';
+            gameOverScreen.style.display = 'none';
+        }, 3000);
+        
+        // 결과 채팅에 전송
+        socket.emit('sendMessage', {
+            text: `⚔️ PvP 게임 결과: ${winner}님이 승리했습니다!`,
+            messageId: `pvp_${Date.now()}`
+        });
+    } else {
+        document.getElementById('pvp-game-container').style.display = 'none';
+    }
+    
+    // 변수 초기화
+    pvpGameId = null;
+    isPlayer1 = false;
+    player1Health = 3;
+    player2Health = 3;
+}
+
+// 플레이어 초기 위치 설정 (레이싱 게임)
 function updatePlayerPosition() {
     const lanes = document.querySelectorAll('.game-lane');
     const lane = lanes[currentLane];
@@ -490,7 +809,7 @@ function updatePlayerPosition() {
     player.style.left = laneCenter + 'px';
 }
 
-// 장애물 생성
+// 장애물 생성 (레이싱 게임)
 function createObstacles() {
     if (!gameActive) return;
     
@@ -518,7 +837,7 @@ function createObstacles() {
     }
 }
 
-// 개별 장애물 생성
+// 개별 장애물 생성 (레이싱 게임)
 function createObstacle(laneIndex) {
     const lanes = document.querySelectorAll('.game-lane');
     const lane = lanes[laneIndex];
@@ -544,7 +863,7 @@ function createObstacle(laneIndex) {
     }, (3 / obstacleSpeed) * 1000 + 100);
 }
 
-// 게임 업데이트
+// 레이싱 게임 업데이트
 function updateGame() {
     if (!gameActive) return;
     
@@ -558,19 +877,12 @@ function updateGame() {
             if (obstacleRect.bottom > playerRect.top && 
                 obstacleRect.top < playerRect.bottom) {
                 // 충돌 발생!
-                endGame();
+                endRacingGame();
                 return;
             }
         }
     });
 }
-
-// 말풍선 플랫폼 생성 (제거)
-function createBubblePlatform(x, y, text) {
-    // 더 이상 사용하지 않음
-}
-
-// 게임 업데이트 (기존 함수 제거, 위의 새로운 updateGame으로 교체됨)
 
 // 이벤트 리스너들
 document.addEventListener('DOMContentLoaded', () => {
@@ -624,9 +936,37 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // 게임 버튼
-    document.getElementById('game-button').addEventListener('click', startGame);
-    document.getElementById('game-close').addEventListener('click', endGame);
+    // 게임 버튼 - 게임 선택 모달 표시
+    document.getElementById('game-button').addEventListener('click', showGameSelection);
+    
+    // 게임 선택 모달 관련
+    document.getElementById('close-game-selection').addEventListener('click', hideGameSelection);
+    document.getElementById('racing-game-option').addEventListener('click', startRacingGame);
+    document.getElementById('pvp-game-option').addEventListener('click', requestPvPGame);
+    
+    // 레이싱 게임 닫기
+    document.getElementById('game-close').addEventListener('click', endRacingGame);
+    
+    // PvP 게임 닫기
+    document.getElementById('pvp-close').addEventListener('click', () => {
+        if (pvpGameActive) {
+            socket.emit('leavePvPGame', { gameId: pvpGameId });
+        }
+        endPvPGame();
+    });
+    
+    // PvP 대전 신청 관련
+    document.getElementById('pvp-accept').addEventListener('click', () => {
+        console.log('PvP 대전 수락 버튼 클릭됨');
+        socket.emit('acceptPvPRequest');
+        document.getElementById('pvp-request-modal').style.display = 'none';
+    });
+    
+    document.getElementById('pvp-decline').addEventListener('click', () => {
+        console.log('PvP 대전 거절 버튼 클릭됨');
+        socket.emit('declinePvPRequest');
+        document.getElementById('pvp-request-modal').style.display = 'none';
+    });
     
     // 이모지 선택기 외부 클릭 시 닫기
     document.addEventListener('click', (e) => {
@@ -673,43 +1013,76 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// 키보드 이벤트 (게임용)
+// 키보드 이벤트
 document.addEventListener('keydown', (e) => {
-    if (!gameActive) return;
+    // 레이싱 게임 키보드 조작
+    if (gameActive && !pvpGameActive) {
+        switch(e.code) {
+            case 'ArrowLeft':
+                e.preventDefault();
+                if (currentLane > 0) {
+                    currentLane--;
+                    updatePlayerPosition();
+                }
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                if (currentLane < 2) {
+                    currentLane++;
+                    updatePlayerPosition();
+                }
+                break;
+            case 'KeyA':
+                e.preventDefault();
+                if (currentLane > 0) {
+                    currentLane--;
+                    updatePlayerPosition();
+                }
+                break;
+            case 'KeyD':
+                e.preventDefault();
+                if (currentLane < 2) {
+                    currentLane++;
+                    updatePlayerPosition();
+                }
+                break;
+        }
+    }
     
-    switch(e.code) {
-        case 'ArrowLeft':
+    // PvP 게임 키보드 조작
+    if (pvpGameActive && gameStarted && !countdownActive) {
+        // 키 상태 업데이트
+        const wasEmpty = Object.keys(pvpKeys).length === 0;
+        pvpKeys[e.code] = true;
+        
+        // 스페이스바로 총알 발사
+        if (e.code === 'Space') {
             e.preventDefault();
-            if (currentLane > 0) {
-                currentLane--;
-                updatePlayerPosition();
-            }
-            break;
-        case 'ArrowRight':
-            e.preventDefault();
-            if (currentLane < 2) {
-                currentLane++;
-                updatePlayerPosition();
-            }
-            break;
-        case 'KeyA':
-            e.preventDefault();
-            if (currentLane > 0) {
-                currentLane--;
-                updatePlayerPosition();
-            }
-            break;
-        case 'KeyD':
-            e.preventDefault();
-            if (currentLane < 2) {
-                currentLane++;
-                updatePlayerPosition();
-            }
-            break;
+            shootBullet();
+        }
+        
+        // 이동 키가 처음 눌렸을 때만 연속 이동 시작
+        if (wasEmpty && (e.code === 'KeyW' || e.code === 'KeyS' || e.code === 'KeyA' || e.code === 'KeyD' ||
+                         e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'ArrowLeft' || e.code === 'ArrowRight')) {
+            startContinuousMovement();
+        }
     }
 });
 
-// 소켓 이벤트들
+document.addEventListener('keyup', (e) => {
+    if (pvpGameActive) {
+        delete pvpKeys[e.code];
+        
+        // 모든 이동 키가 떼어졌으면 연속 이동 중지
+        const hasMovementKeys = pvpKeys['KeyW'] || pvpKeys['KeyS'] || pvpKeys['KeyA'] || pvpKeys['KeyD'] ||
+                               pvpKeys['ArrowUp'] || pvpKeys['ArrowDown'] || pvpKeys['ArrowLeft'] || pvpKeys['ArrowRight'];
+        
+        if (!hasMovementKeys) {
+            stopContinuousMovement();
+        }
+    }
+});
+
 // 소켓 이벤트들
 socket.on('userJoined', (data) => {
     console.log('userJoined 이벤트 수신:', data);
@@ -781,6 +1154,89 @@ socket.on('messageEdited', (data) => {
             content.innerHTML = data.newText + ' <span style="opacity: 0.7; font-size: 10px;">(수정됨)</span>';
         }
     }
+});
+
+// PvP 게임 관련 소켓 이벤트들
+socket.on('pvpRequestReceived', (data) => {
+    console.log('PvP 대전 신청 받음:', data);
+    document.getElementById('challenger-name').textContent = data.challengerName;
+    document.getElementById('pvp-request-modal').style.display = 'flex';
+});
+
+socket.on('pvpRequestAccepted', (data) => {
+    console.log('PvP 대전 신청 수락됨:', data);
+    alert(`${data.targetName}님이 대전 신청을 수락했습니다!`);
+});
+
+socket.on('pvpRequestDeclined', (data) => {
+    console.log('PvP 대전 신청 거절됨:', data);
+    alert(`${data.targetName}님이 대전 신청을 거절했습니다.`);
+});
+
+socket.on('pvpGameCreated', (gameData) => {
+    console.log('PvP 게임 생성됨:', gameData);
+    // PvP 게임 화면 표시
+    document.getElementById('pvp-game-container').style.display = 'flex';
+    initPvPGame(gameData);
+});
+
+socket.on('pvpGameAccepted', (gameData) => {
+    console.log('PvP 게임 수락됨:', gameData);
+    // PvP 게임 화면 표시
+    document.getElementById('pvp-game-container').style.display = 'flex';
+    initPvPGame(gameData);
+});
+
+socket.on('pvpGameJoined', (gameData) => {
+    console.log('PvP 게임 참가됨:', gameData);
+    // PvP 게임 화면 표시
+    document.getElementById('pvp-game-container').style.display = 'flex';
+    initPvPGame(gameData);
+});
+
+socket.on('pvpPlayerMove', (data) => {
+    if (data.playerId !== socket.id) {
+        opponentPosition = data.position;
+        opponentDirection = data.direction;
+        updatePvPPlayerPositions();
+    }
+});
+
+socket.on('pvpPlayerShoot', (data) => {
+    console.log('상대방 총알 발사:', data);
+    createBullet(data.position, data.direction, data.playerId === socket.id);
+});
+
+socket.on('pvpPlayerHit', (data) => {
+    console.log('플레이어 피격:', data);
+    
+    // 체력 업데이트
+    if (data.isPlayer1) {
+        player1Health = data.health;
+    } else {
+        player2Health = data.health;
+    }
+    
+    console.log(`체력 업데이트: Player1=${player1Health}, Player2=${player2Health}`);
+    
+    updateHealthBars();
+    
+    // 체력이 0이 되면 게임 종료
+    if (data.winner) {
+        console.log('게임 종료, 승자:', data.winner);
+        endPvPGame(data.winner);
+    }
+});
+
+socket.on('pvpGameEnded', (data) => {
+    console.log('PvP 게임 종료:', data);
+    endPvPGame(data.winner);
+});
+
+socket.on('pvpGameError', (data) => {
+    console.log('PvP 게임 오류:', data);
+    alert(data.message);
+    endPvPGame();
 });
 
 socket.on('connect', () => {
