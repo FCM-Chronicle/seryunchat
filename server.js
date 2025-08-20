@@ -120,19 +120,20 @@ class PvPGame {
     this.moveBullet(bullet);
   }
 
-  // 총알 이동 및 충돌 검사 (간단명료하게)
+  // 총알 이동 및 충돌 검사 (플래그 기반)
   moveBullet(bullet) {
     const moveInterval = setInterval(() => {
-      // 게임이 끝났으면 중지
-      if (this.gameEnded) {
+      // 게임이 끝났거나 총알이 이미 충돌했으면 중지
+      if (this.gameEnded || bullet.hasCollided) {
+        console.log(`⏹️ 총알 이동 중지: ${bullet.id} (게임종료: ${this.gameEnded}, 충돌: ${bullet.hasCollided})`);
         clearInterval(moveInterval);
         return;
       }
       
-      // 총알이 배열에서 제거되었는지 확인 (충돌로 인한 삭제)
+      // 총알이 배열에서 제거되었는지 확인
       const bulletExists = this.bullets.find(b => b.id === bullet.id);
       if (!bulletExists) {
-        console.log(`총알 제거됨: ${bullet.id}`);
+        console.log(`❌ 총알 배열에서 제거됨: ${bullet.id}`);
         clearInterval(moveInterval);
         return;
       }
@@ -153,32 +154,45 @@ class PvPGame {
       // 경계 벗어남 체크
       if (bullet.position.x < -10 || bullet.position.x > 770 || 
           bullet.position.y < -10 || bullet.position.y > 530) {
+        console.log(`🌊 총알 경계 벗어남: ${bullet.id}`);
         this.bullets = this.bullets.filter(b => b.id !== bullet.id);
         clearInterval(moveInterval);
         return;
       }
       
-      // 충돌 검사 (여기서 총알이 즉시 삭제됨)
-      const collided = this.checkBulletCollisions(bullet);
-      if (collided) {
-        // 충돌했으면 이동 즉시 중지
-        clearInterval(moveInterval);
-        return;
+      // ⭐ 충돌 검사 (충돌 플래그가 false일 때만)
+      if (!bullet.hasCollided) {
+        const collided = this.checkBulletCollisions(bullet);
+        if (collided) {
+          console.log(`💥 충돌로 인한 이동 중지: ${bullet.id}`);
+          clearInterval(moveInterval);
+          return;
+        }
       }
       
     }, 50); // 20fps
     
     // 2초 후 자동 제거
     setTimeout(() => {
-      this.bullets = this.bullets.filter(b => b.id === bullet.id);
-      clearInterval(moveInterval);
+      if (!bullet.hasCollided) {
+        console.log(`⏰ 총알 시간 만료: ${bullet.id}`);
+        this.bullets = this.bullets.filter(b => b.id === bullet.id);
+        clearInterval(moveInterval);
+      }
     }, 2000);
   }
 
-  // 총알과 플레이어 충돌 검사 (간단하고 확실한 방법)
+  // 총알과 플레이어 충돌 검사 (총알 플래그 방식)
   checkBulletCollisions(bullet) {
+    // ⭐ 핵심: 이미 충돌한 총알이면 절대 처리하지 않음
+    if (bullet.hasCollided) {
+      return false;
+    }
+    
     // 게임이 끝났으면 무시
-    if (this.gameEnded) return false;
+    if (this.gameEnded) {
+      return false;
+    }
     
     const hitRadius = 18;
     const targetPlayer = bullet.playerId === this.player1.id ? this.player2 : this.player1;
@@ -190,11 +204,18 @@ class PvPGame {
     );
     
     if (distance < hitRadius) {
-      console.log(`🎯 충돌! ${bullet.id} → ${targetPlayer.username}`);
+      // ⭐ 즉시 충돌 플래그 설정 (가장 먼저!)
+      bullet.hasCollided = true;
       
-      // ⭐ 핵심: 즉시 총알을 배열에서 완전 제거
-      this.bullets = this.bullets.filter(b => b.id !== bullet.id);
-      console.log(`💥 총알 즉시 삭제: ${bullet.id}`);
+      console.log(`🎯 충돌! ${bullet.id} → ${targetPlayer.username}`);
+      console.log(`🚫 총알 충돌 플래그 설정: ${bullet.id}`);
+      
+      // 총알을 배열에서 완전 제거
+      const bulletIndex = this.bullets.findIndex(b => b.id === bullet.id);
+      if (bulletIndex !== -1) {
+        this.bullets.splice(bulletIndex, 1);
+        console.log(`💥 총알 배열에서 제거: ${bullet.id} (남은 총알: ${this.bullets.length})`);
+      }
       
       // 체력 감소
       const oldHealth = targetPlayer.health;
@@ -217,9 +238,10 @@ class PvPGame {
         bulletId: bullet.id
       };
       
+      console.log(`📤 피격 이벤트 전송: ${JSON.stringify(hitData)}`);
+      
       io.to(this.player1.id).emit('pvpPlayerHit', hitData);
       io.to(this.player2.id).emit('pvpPlayerHit', hitData);
-      console.log(`📤 피격 이벤트 전송 완료`);
       
       // 게임 종료 처리
       if (winner) {
@@ -227,7 +249,7 @@ class PvPGame {
         setTimeout(() => this.endGame(winner), 300);
       }
       
-      return true; // 충돌 발생함
+      return true;
     }
     
     return false;
