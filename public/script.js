@@ -1208,35 +1208,44 @@ socket.on('pvpPlayerShoot', (data) => {
 });
 
 socket.on('pvpPlayerHit', (data) => {
-    console.log('플레이어 피격:', data);
+    console.log('=== 피격 이벤트 수신 ===', data);
     
-    // 체력 업데이트
+    // 중복 처리 방지
     if (data.isPlayer1) {
+        if (player1Health === data.health) {
+            console.log('Player1 체력 중복 업데이트 무시');
+            return;
+        }
+        console.log(`Player1 체력 업데이트: ${player1Health} → ${data.health}/3`);
         player1Health = data.health;
-        console.log(`Player1 체력 업데이트: ${player1Health}/3`);
     } else {
+        if (player2Health === data.health) {
+            console.log('Player2 체력 중복 업데이트 무시');
+            return;
+        }
+        console.log(`Player2 체력 업데이트: ${player2Health} → ${data.health}/3`);
         player2Health = data.health;
-        console.log(`Player2 체력 업데이트: ${player2Health}/3`);
     }
     
     updateHealthBars();
     
-    // 피격 효과 (간단한 화면 효과)
+    // 피격 효과 (내가 맞았을 때)
     if ((data.isPlayer1 && isPlayer1) || (!data.isPlayer1 && !isPlayer1)) {
-        // 내가 맞았을 때 빨간 테두리 효과
+        console.log('내가 피격당함!');
         const gameArea = document.getElementById('pvp-game-area');
-        gameArea.style.border = '3px solid #ff4444';
+        gameArea.style.border = '5px solid #ff4444';
+        gameArea.style.boxShadow = '0 0 20px #ff4444';
         setTimeout(() => {
             gameArea.style.border = '3px solid #262626';
-        }, 200);
+            gameArea.style.boxShadow = 'none';
+        }, 300);
     }
     
-    // 체력이 0이 되면 게임 종료
+    // 게임 종료 처리
     if (data.winner) {
-        console.log('게임 종료, 승자:', data.winner);
-        setTimeout(() => {
-            endPvPGame(data.winner);
-        }, 1000); // 1초 후 게임 종료 (피격 효과 시간)
+        console.log('=== 게임 종료 ===', data.winner);
+        // 즉시 게임 종료 (지연 없음)
+        endPvPGame(data.winner);
     }
 });
 
