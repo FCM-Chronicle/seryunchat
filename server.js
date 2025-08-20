@@ -167,13 +167,15 @@ class PvPGame {
       if (!bullet.hasHit) {
         const collided = this.checkBulletCollisions(bullet);
         if (collided) {
-          // 충돌했으면 즉시 이동 중지
+          // 충돌했으면 즉시 이동 중지하고 총알 완전 제거
+          console.log(`충돌로 인한 총알 이동 중지: ${bullet.id}`);
+          this.bullets = this.bullets.filter(b => b.id !== bullet.id);
           clearInterval(moveInterval);
           return;
         }
       }
       
-    }, 30); // 33fps로 더 느리게 (정확한 충돌 검사와 중복 방지)
+    }, 50); // 20fps로 더 느리게 (정확한 충돌 검사)
     
     // 2초 후 총알 자동 제거
     setTimeout(() => {
@@ -209,7 +211,7 @@ class PvPGame {
     );
     
     if (distance < hitRadius) {
-      // 충돌 처리 시작 - 즉시 마킹
+      // 즉시 모든 플래그 설정하여 중복 방지
       this.processedHits.add(hitKey);
       bullet.hasHit = true;
       
@@ -217,66 +219,63 @@ class PvPGame {
       console.log(`피격자: ${targetPlayer.username}, 기존 체력: ${targetPlayer.health}`);
       console.log(`총알 ID: ${bullet.id}, 발사자: ${shooterPlayer.username}`);
       
-      // 체력 1 감소
+      // 단 1번만 체력 감소
       const previousHealth = targetPlayer.health;
-      targetPlayer.health = Math.max(0, previousHealth - 1);
-      
-      console.log(`체력 변화: ${previousHealth} → ${targetPlayer.health}`);
-      
-      // 총알 즉시 제거 (배열에서 완전히 삭제)
-      this.bullets = this.bullets.filter(b => b.id !== bullet.id);
-      console.log(`총알 완전 제거: ${bullet.id}, 남은 총알: ${this.bullets.length}`);
-      
-      // 승자 결정
-      let winner = null;
-      if (targetPlayer.health === 0) {
-        winner = shooterPlayer.username;
-        this.gameEnded = true; // 즉시 게임 종료 상태로 변경
-        console.log(`=== 게임 종료 조건 충족 ===`);
-        console.log(`승자: ${winner}`);
-      }
-      
-      // 피격 이벤트 전송 (한 번만)
-      const hitData = {
-        isPlayer1: targetPlayer.id === this.player1.id,
-        health: targetPlayer.health,
-        maxHealth: 3,
-        winner: winner,
-        hitPlayerId: targetPlayer.id,
-        shooterId: shooterPlayer.id,
-        damage: 1,
-        bulletId: bullet.id, // 디버깅용
-        hitKey: hitKey // 디버깅용
-      };
-      
-      console.log(`클라이언트에 전송할 데이터:`, hitData);
-      console.log(`전송 시점 - 게임 종료 상태: ${this.gameEnded}`);
-      
-      // 양쪽 플레이어에게 한 번만 전송
-      try {
-        io.to(this.player1.id).emit('pvpPlayerHit', hitData);
-        io.to(this.player2.id).emit('pvpPlayerHit', hitData);
-        console.log('피격 이벤트 전송 완료');
-      } catch (error) {
-        console.error('이벤트 전송 오류:', error);
-      }
-      
-      // 게임 종료 처리
-      if (winner) {
-        console.log(`게임 종료 처리 시작`);
+      if (previousHealth > 0) {
+        targetPlayer.health = previousHealth - 1;
+        console.log(`체력 변화: ${previousHealth} → ${targetPlayer.health}`);
         
-        // 모든 총알 제거
-        this.bullets = [];
+        // 승자 결정
+        let winner = null;
+        if (targetPlayer.health === 0) {
+          winner = shooterPlayer.username;
+          this.gameEnded = true; // 즉시 게임 종료 상태로 변경
+          console.log(`=== 게임 종료 조건 충족 ===`);
+          console.log(`승자: ${winner}`);
+        }
         
-        // 즉시 게임 종료
-        setTimeout(() => {
-          this.endGame(winner);
-        }, 100); // 짧은 지연으로 이벤트 전송 보장
+        // 피격 이벤트 전송 (단 1번만)
+        const hitData = {
+          isPlayer1: targetPlayer.id === this.player1.id,
+          health: targetPlayer.health,
+          maxHealth: 3,
+          winner: winner,
+          hitPlayerId: targetPlayer.id,
+          shooterId: shooterPlayer.id,
+          damage: 1,
+          bulletId: bullet.id,
+          hitKey: hitKey
+        };
+        
+        console.log(`클라이언트에 전송할 데이터:`, hitData);
+        
+        // 양쪽 플레이어에게 한 번만 전송
+        try {
+          io.to(this.player1.id).emit('pvpPlayerHit', hitData);
+          io.to(this.player2.id).emit('pvpPlayerHit', hitData);
+          console.log('피격 이벤트 전송 완료 (1회)');
+        } catch (error) {
+          console.error('이벤트 전송 오류:', error);
+        }
+        
+        // 게임 종료 처리
+        if (winner) {
+          console.log(`게임 종료 처리 시작`);
+          
+          // 모든 총알 즉시 제거
+          this.bullets = [];
+          
+          // 게임 종료
+          setTimeout(() => {
+            if (!this.gameEnded) return; // 중복 방지
+            this.endGame(winner);
+          }, 200); // 짧은 지연으로 이벤트 전송 보장
+        }
+      } else {
+        console.log(`체력이 이미 0이므로 추가 데미지 무시`);
       }
       
       console.log(`=== 충돌 처리 완료 ===`);
-      
-      // 충돌 처리 후 즉시 반환하여 추가 처리 방지
       return true;
     }
     
