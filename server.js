@@ -69,19 +69,21 @@ class PvPGame {
       username: player1.username,
       position: { x: 100, y: 100 },
       direction: 'up',
-      health: 3 // 명시적으로 3으로 설정
+      health: 3
     };
     this.player2 = {
       id: player2.id,
       username: player2.username,
       position: { x: 600, y: 400 },
       direction: 'up',
-      health: 3 // 명시적으로 3으로 설정
+      health: 3
     };
     this.bullets = [];
     this.gameStarted = false;
     this.gameEnded = false;
     this.processedHits = new Set(); // 처리된 충돌 추적
+    this.hitQueue = []; // 피격 이벤트 큐
+    this.processingHit = false; // 피격 처리 중 플래그
     
     console.log(`새 게임 생성: ${this.id}`, {
       player1: { username: this.player1.username, health: this.player1.health },
@@ -187,19 +189,73 @@ class PvPGame {
     }, 2000);
   }
 
+  // 피격 처리 큐 시스템
+  async processHitQueue() {
+    if (this.processingHit || this.hitQueue.length === 0 || this.gameEnded) return;
+    
+    this.processingHit = true;
+    const hitData = this.hitQueue.shift();
+    
+    console.log(`=== 피격 처리 시작 ===`);
+    console.log(`총알 ID: ${hitData.bulletId}`);
+    console.log(`피격자: ${hitData.targetPlayer.username}, 현재 체력: ${hitData.targetPlayer.health}`);
+    
+    // 체력 감소
+    if (hitData.targetPlayer.health > 0) {
+      hitData.targetPlayer.health -= 1;
+      console.log(`체력 감소: ${hitData.targetPlayer.health + 1} → ${hitData.targetPlayer.health}`);
+      
+      // 승자 결정
+      let winner = null;
+      if (hitData.targetPlayer.health === 0) {
+        winner = hitData.shooterPlayer.username;
+        this.gameEnded = true;
+        console.log(`게임 종료! 승자: ${winner}`);
+      }
+      
+      // 클라이언트에 전송
+      const eventData = {
+        isPlayer1: hitData.targetPlayer.id === this.player1.id,
+        health: hitData.targetPlayer.health,
+        winner: winner,
+        bulletId: hitData.bulletId
+      };
+      
+      console.log(`전송 데이터:`, eventData);
+      
+      io.to(this.player1.id).emit('pvpPlayerHit', eventData);
+      io.to(this.player2.id).emit('pvpPlayerHit', eventData);
+      
+      console.log(`피격 이벤트 전송 완료`);
+      
+      // 게임 종료 처리
+      if (winner) {
+        this.bullets = []; // 모든 총알 제거
+        setTimeout(() => {
+          this.endGame(winner);
+        }, 500);
+      }
+    }
+    
+    console.log(`=== 피격 처리 완료 ===`);
+    this.processingHit = false;
+    
+    // 큐에 다른 피격이 있으면 처리
+    setTimeout(() => this.processHitQueue(), 100);
+  }
+
   // 총알과 플레이어 충돌 검사
   checkBulletCollisions(bullet) {
     // 이미 충돌한 총알이거나 게임이 끝났으면 무시
     if (bullet.hasHit || this.gameEnded) return false;
     
     // 이미 처리된 충돌인지 확인
-    const hitKey = `${bullet.id}-collision`;
+    const hitKey = `${bullet.id}`;
     if (this.processedHits.has(hitKey)) {
-      console.log(`이미 처리된 충돌 무시: ${hitKey}`);
       return false;
     }
     
-    const hitRadius = 18; // 충돌 반경
+    const hitRadius = 18;
     
     // 자신의 총알로는 자신을 맞힐 수 없음
     const targetPlayer = bullet.playerId === this.player1.id ? this.player2 : this.player1;
@@ -211,71 +267,29 @@ class PvPGame {
     );
     
     if (distance < hitRadius) {
-      // 즉시 모든 플래그 설정하여 중복 방지
+      console.log(`충돌 감지: ${bullet.id} → ${targetPlayer.username}`);
+      
+      // 즉시 충돌 처리 완료로 마킹
       this.processedHits.add(hitKey);
       bullet.hasHit = true;
       
-      console.log(`=== 충돌 감지 (최초) ===`);
-      console.log(`피격자: ${targetPlayer.username}, 기존 체력: ${targetPlayer.health}`);
-      console.log(`총알 ID: ${bullet.id}, 발사자: ${shooterPlayer.username}`);
+      // 총알 제거
+      this.bullets = this.bullets.filter(b => b.id !== bullet.id);
       
-      // 단 1번만 체력 감소
-      const previousHealth = targetPlayer.health;
-      if (previousHealth > 0) {
-        targetPlayer.health = previousHealth - 1;
-        console.log(`체력 변화: ${previousHealth} → ${targetPlayer.health}`);
-        
-        // 승자 결정
-        let winner = null;
-        if (targetPlayer.health === 0) {
-          winner = shooterPlayer.username;
-          this.gameEnded = true; // 즉시 게임 종료 상태로 변경
-          console.log(`=== 게임 종료 조건 충족 ===`);
-          console.log(`승자: ${winner}`);
-        }
-        
-        // 피격 이벤트 전송 (단 1번만)
-        const hitData = {
-          isPlayer1: targetPlayer.id === this.player1.id,
-          health: targetPlayer.health,
-          maxHealth: 3,
-          winner: winner,
-          hitPlayerId: targetPlayer.id,
-          shooterId: shooterPlayer.id,
-          damage: 1,
+      // 피격 큐에 추가 (중복 방지)
+      if (!this.hitQueue.find(h => h.bulletId === bullet.id)) {
+        this.hitQueue.push({
           bulletId: bullet.id,
-          hitKey: hitKey
-        };
+          targetPlayer: targetPlayer,
+          shooterPlayer: shooterPlayer
+        });
         
-        console.log(`클라이언트에 전송할 데이터:`, hitData);
+        console.log(`피격 큐에 추가: ${bullet.id}, 큐 길이: ${this.hitQueue.length}`);
         
-        // 양쪽 플레이어에게 한 번만 전송
-        try {
-          io.to(this.player1.id).emit('pvpPlayerHit', hitData);
-          io.to(this.player2.id).emit('pvpPlayerHit', hitData);
-          console.log('피격 이벤트 전송 완료 (1회)');
-        } catch (error) {
-          console.error('이벤트 전송 오류:', error);
-        }
-        
-        // 게임 종료 처리
-        if (winner) {
-          console.log(`게임 종료 처리 시작`);
-          
-          // 모든 총알 즉시 제거
-          this.bullets = [];
-          
-          // 게임 종료
-          setTimeout(() => {
-            if (!this.gameEnded) return; // 중복 방지
-            this.endGame(winner);
-          }, 200); // 짧은 지연으로 이벤트 전송 보장
-        }
-      } else {
-        console.log(`체력이 이미 0이므로 추가 데미지 무시`);
+        // 큐 처리 시작
+        this.processHitQueue();
       }
       
-      console.log(`=== 충돌 처리 완료 ===`);
       return true;
     }
     
