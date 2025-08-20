@@ -1213,18 +1213,30 @@ socket.on('pvpPlayerHit', (data) => {
     // 체력 업데이트
     if (data.isPlayer1) {
         player1Health = data.health;
+        console.log(`Player1 체력 업데이트: ${player1Health}/3`);
     } else {
         player2Health = data.health;
+        console.log(`Player2 체력 업데이트: ${player2Health}/3`);
     }
     
-    console.log(`체력 업데이트: Player1=${player1Health}, Player2=${player2Health}`);
-    
     updateHealthBars();
+    
+    // 피격 효과 (간단한 화면 효과)
+    if ((data.isPlayer1 && isPlayer1) || (!data.isPlayer1 && !isPlayer1)) {
+        // 내가 맞았을 때 빨간 테두리 효과
+        const gameArea = document.getElementById('pvp-game-area');
+        gameArea.style.border = '3px solid #ff4444';
+        setTimeout(() => {
+            gameArea.style.border = '3px solid #262626';
+        }, 200);
+    }
     
     // 체력이 0이 되면 게임 종료
     if (data.winner) {
         console.log('게임 종료, 승자:', data.winner);
-        endPvPGame(data.winner);
+        setTimeout(() => {
+            endPvPGame(data.winner);
+        }, 1000); // 1초 후 게임 종료 (피격 효과 시간)
     }
 });
 
